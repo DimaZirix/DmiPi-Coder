@@ -12,6 +12,7 @@ import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.llm.ModelRegistry;
 import com.dmipi.coder.core.domain.permissions.Mode;
 import com.dmipi.coder.core.domain.tool.ToolRegistry;
+import com.dmipi.coder.core.infrastructure.files.AnchoredFileSystem;
 import com.dmipi.coder.core.infrastructure.json.JacksonToolParamsParser;
 import com.dmipi.coder.core.plugin.Capabilities;
 import com.dmipi.coder.core.plugin.Configuration;
@@ -184,7 +185,7 @@ public final class Coder {
 
             final PermissionGate gate = new PermissionGate(hil, mode);
             final LateBound lateBound = new LateBound();
-            final Capabilities granted = new Capabilities(hil, text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools());
+            final Capabilities granted = new Capabilities(hil, text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory));
 
             final PluginCatalog catalog = new PluginCatalog();
             for (final Plugin plugin : plugins) {

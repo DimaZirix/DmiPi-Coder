@@ -18,6 +18,7 @@
         <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jackson.version>3.1.4</jackson.version>
+        <java-diff-utils.version>4.17</java-diff-utils.version>
         <junit.version>5.12.2</junit.version>
         <assertj.version>3.27.3</assertj.version>
         <surefire.version>3.5.3</surefire.version>
@@ -29,6 +30,11 @@
                 <groupId>tools.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
                 <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.java-diff-utils</groupId>
+                <artifactId>java-diff-utils</artifactId>
+                <version>${java-diff-utils.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.junit</groupId>

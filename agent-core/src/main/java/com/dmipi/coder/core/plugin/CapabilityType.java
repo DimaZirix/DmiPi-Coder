@@ -9,5 +9,6 @@ public enum CapabilityType {
     OUTPUT,
     LLM,
     CONFIGURATION,
-    TOOLS
+    TOOLS,
+    FILE_SYSTEM
 }

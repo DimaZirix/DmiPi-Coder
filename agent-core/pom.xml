@@ -13,11 +13,15 @@
     <artifactId>agent-core</artifactId>
 
     <!-- Dependency rule: well-known libraries only, each one approved by the project owner
-         before it is added. Approved so far: jackson-databind (JSON). -->
+         before it is added. Approved so far: jackson-databind (JSON), java-diff-utils (diffs). -->
     <dependencies>
         <dependency>
             <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.java-diff-utils</groupId>
+            <artifactId>java-diff-utils</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
