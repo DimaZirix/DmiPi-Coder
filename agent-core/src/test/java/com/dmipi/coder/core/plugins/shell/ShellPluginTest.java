@@ -58,6 +58,32 @@ class ShellPluginTest {
     }
 
     @Test
+    @DisplayName("an approved command actually runs and the model reads its output")
+    void should_run_an_approved_command_end_to_end() {
+        // Given: the model runs a command; the user approves it
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "run_shell_command", "{\"command\": \"echo hi from the sandbox\"}"),
+                ScriptedClient.textStep("done")));
+        final ScriptedHil hil = new ScriptedHil(List.of(Answer.of("allow-once")));
+
+        // When
+        try (Coder coder = Coder.builder()
+                .out(out)
+                .hil(hil)
+                .model(MODEL)
+                .registerPlugin(providerPlugin(client))
+                .registerPlugin(new DirectSandboxPlugin())
+                .registerPlugin(new ShellPlugin())
+                .build()) {
+            coder.runTurn("run it", new CancelToken());
+        }
+
+        // Then: the tool result the model read carries the command's output
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content()).contains("hi from the sandbox"));
+    }
+
+    @Test
     @DisplayName("the shell plugin without a sandbox provider fails the build with a clear message")
     void should_fail_without_a_sandbox_provider() {
         // When / Then
