@@ -21,5 +21,7 @@ public final class FilesReadPlugin implements Plugin {
     public void install(final PluginRegistrar registrar, final Capabilities capabilities) {
         registrar.registerTool(new ReadFileTool(capabilities.fileSystem()));
         registrar.registerTool(new ListDirectoryTool(capabilities.fileSystem()));
+        registrar.registerTool(new GlobTool(capabilities.fileSystem()));
+        registrar.registerTool(new GrepTool(capabilities.fileSystem()));
     }
 }

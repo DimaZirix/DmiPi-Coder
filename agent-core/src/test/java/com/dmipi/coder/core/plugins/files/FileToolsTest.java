@@ -137,6 +137,46 @@ class FileToolsTest {
                 .hasValueSatisfying(message -> assertThat(message).contains("identical"));
     }
 
+    @Test
+    @DisplayName("edit matches and preserves CRLF files even though the model composes strings with \\n")
+    void should_edit_a_crlf_file() throws IOException {
+        // Given: a CRLF file, and an old_string spanning a line break as the model would write it
+        Files.writeString(project.resolve("f.txt"), "hello\r\nworld\r\n");
+
+        // When
+        final ToolResult result = new EditTool(files()).execute(params("{\"path\": \"f.txt\", \"old_string\": \"hello\\nworld\", \"new_string\": \"bye\\nworld\"}"), new CancelToken());
+
+        // Then: the edit applied and the file kept its CRLF endings
+        assertThat(result).isInstanceOf(ToolResult.Success.class);
+        assertThat(Files.readString(project.resolve("f.txt"))).isEqualTo("bye\r\nworld\r\n");
+    }
+
+    @Test
+    @DisplayName("an absurdly large offset fails cleanly instead of wrapping into a crash")
+    void should_reject_a_huge_offset_cleanly() throws IOException {
+        // Given
+        Files.writeString(project.resolve("f.txt"), "one\ntwo");
+
+        // When
+        final ToolResult result = new ReadFileTool(files()).execute(params("{\"path\": \"f.txt\", \"offset\": 6000000000}"), new CancelToken());
+
+        // Then
+        assertThat(result).isInstanceOf(ToolResult.Failure.class);
+        assertThat(result.llmContent()).contains("past the end");
+    }
+
+    @Test
+    @DisplayName("the preview of an edit that would fail says so instead of showing an unapplicable diff")
+    void should_preview_a_failing_edit_honestly() throws IOException {
+        // Given
+        Files.writeString(project.resolve("f.txt"), "a b a");
+        final EditTool tool = new EditTool(files());
+
+        // Then: ambiguous without replace_all, and not-found, both announce the failure
+        assertThat(tool.preview(params("{\"path\": \"f.txt\", \"old_string\": \"a\", \"new_string\": \"c\"}"))).contains("will fail without replace_all");
+        assertThat(tool.preview(params("{\"path\": \"f.txt\", \"old_string\": \"zz\", \"new_string\": \"c\"}"))).contains("was not found");
+    }
+
     private AnchoredFileSystem files() {
         return new AnchoredFileSystem(project);
     }

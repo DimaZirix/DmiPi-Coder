@@ -84,11 +84,12 @@ final class ReadFileTool implements Tool {
         }
 
         final List<String> lines = content.lines().toList();
-        final int offset = (int) Math.max(1, params.integer("offset").orElse(1L));
-        final int limit = (int) Math.min(MAX_LINES, Math.max(1, params.integer("limit").orElse((long) MAX_LINES)));
-        if (offset > lines.size() && !lines.isEmpty()) {
-            return new ToolResult.Failure("The file has only " + lines.size() + " lines; offset " + offset + " is past the end.");
+        final long offsetParam = Math.max(1, params.integer("offset").orElse(1L));
+        if (offsetParam > Math.max(1, lines.size())) {
+            return new ToolResult.Failure("The file has only " + lines.size() + " lines; offset " + offsetParam + " is past the end.");
         }
+        final int offset = (int) offsetParam;
+        final int limit = (int) Math.min(MAX_LINES, Math.max(1, params.integer("limit").orElse((long) MAX_LINES)));
 
         final int end = Math.min(lines.size(), offset - 1 + limit);
         final String window = String.join("\n", lines.subList(offset - 1, end));

@@ -176,6 +176,60 @@ class AgentLoopTest {
         assertThat(out.kinds()).containsExactly(OutEvent.TurnStarted.class, OutEvent.TurnEnded.class);
     }
 
+    @Test
+    @DisplayName("tool calls execute in wire-index order even when fragments arrive out of order")
+    void should_order_tool_calls_by_index() {
+        // Given: index 1 streamed before index 0
+        final List<LlmStreamEvent> outOfOrder = List.of(
+                new LlmStreamEvent.ToolCallDelta(1, "c-second", "echo", "{\"text\": \"second\"}"),
+                new LlmStreamEvent.ToolCallDelta(0, "c-first", "echo", "{\"text\": \"first\"}"),
+                new LlmStreamEvent.Finished(LlmStreamEvent.FinishReason.TOOL_CALLS));
+        final ScriptedClient client = new ScriptedClient(List.of(outOfOrder, ScriptedClient.textStep("done")));
+        final StubTool echo = new StubTool("echo", ToolKind.READ, PermissionDecision.ALLOW, params -> new ToolResult.Success("ok " + params.string("text").orElse(""), new Display.Text("ok")));
+        final AgentLoop loop = loop(client, List.of(echo));
+
+        // When
+        loop.runTurn("go", new CancelToken());
+
+        // Then: results returned to the model in index order
+        final List<String> toolResults = client.requests().get(1).messages()
+                .stream()
+                .filter(message -> message.role() == Role.TOOL)
+                .map(message -> message.toolCallId())
+                .toList();
+        assertThat(toolResults).containsExactly("c-first", "c-second");
+    }
+
+    @Test
+    @DisplayName("a message-less exception still produces a meaningful turn failure")
+    void should_describe_a_message_less_failure() {
+        // Given: a client that throws with no message
+        final com.dmipi.coder.core.domain.llm.LlmClient throwing = (request, cancel, events) -> {
+            throw new IllegalStateException();
+        };
+        final ProtocolProvider provider = new ProtocolProvider() {
+
+            @Override
+            public String protocol() {
+                return "scripted";
+            }
+
+            @Override
+            public com.dmipi.coder.core.domain.llm.LlmClient connect(final ModelDeclaration declaration) {
+                return throwing;
+            }
+        };
+        final ModelRegistry registry = new ModelRegistry(List.of(new ModelDeclaration("test", "scripted", "", Tier.FAST, 8_000)), List.of(provider));
+        final AgentLoop loop = new AgentLoop(conversation, registry, new ToolRegistry(List.of()), ALLOW_ALL_GATE, parser(), out, 10);
+
+        // When
+        loop.runTurn("hi", new CancelToken());
+
+        // Then
+        assertThat(out.events().getLast())
+                .isInstanceOfSatisfying(OutEvent.TurnFailed.class, failed -> assertThat(failed.error()).contains("IllegalStateException"));
+    }
+
     private AgentLoop loop(final ScriptedClient client, final List<com.dmipi.coder.core.domain.tool.Tool> tools) {
         return new AgentLoop(conversation, registry(client), new ToolRegistry(tools), ALLOW_ALL_GATE, parser(), out, 10);
     }

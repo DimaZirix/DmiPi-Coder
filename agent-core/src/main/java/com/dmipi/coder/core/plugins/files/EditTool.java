@@ -80,16 +80,30 @@ final class EditTool implements Tool {
         return PermissionDecision.ASK;
     }
 
-    /** The real unified diff of what would change; falls back to a bare -/+ pair when the file cannot be read. */
+    /**
+     * The real unified diff of what would change. When execution would refuse — no match, or an
+     * ambiguous match without replace_all — the preview says so instead of showing a diff that
+     * could never be applied. Falls back to a bare -/+ pair when the file cannot be read.
+     */
     @Override
     public String preview(final ToolParams params) {
+        final String content;
         try {
-            final String content = files.read(files.resolve(params.string("path").orElse("")));
-            final String diff = UnifiedDiffs.between(params.string("path").orElse(""), content, replaced(content, params));
-            return diff.isEmpty() ? fallbackPreview(params) : diff;
+            content = files.read(files.resolve(params.string("path").orElse("")));
         } catch (final RuntimeException unreadable) {
             return fallbackPreview(params);
         }
+
+        final String oldString = adaptedToFile(content, params.string("old_string").orElse(""));
+        final String newString = adaptedToFile(content, params.string("new_string").orElse(""));
+        final int occurrences = count(content, oldString);
+        if (occurrences == 0) {
+            return "(old_string was not found — this edit will fail)\n" + fallbackPreview(params);
+        }
+        if (occurrences > 1 && !params.bool("replace_all").orElse(false)) {
+            return "(old_string appears " + occurrences + " times — this edit will fail without replace_all)\n" + fallbackPreview(params);
+        }
+        return UnifiedDiffs.between(params.string("path").orElse(""), content, content.replace(oldString, newString));
     }
 
     @Override
@@ -100,8 +114,6 @@ final class EditTool implements Tool {
     @Override
     public ToolResult execute(final ToolParams params, final CancelToken cancel) {
         final String pathParam = params.string("path").orElseThrow();
-        final String oldString = params.string("old_string").orElseThrow();
-        final String newString = params.string("new_string").orElseThrow();
 
         final Path path;
         final String content;
@@ -112,6 +124,8 @@ final class EditTool implements Tool {
             return new ToolResult.Failure(failure.getMessage());
         }
 
+        final String oldString = adaptedToFile(content, params.string("old_string").orElseThrow());
+        final String newString = adaptedToFile(content, params.string("new_string").orElseThrow());
         final int occurrences = count(content, oldString);
         if (occurrences == 0) {
             return new ToolResult.Failure("'old_string' was not found in " + pathParam + ". Read the file and copy the text exactly, including whitespace.");
@@ -131,8 +145,16 @@ final class EditTool implements Tool {
         return new ToolResult.Success("Replaced " + replaced + " occurrence(s) in " + pathParam + ".", new Display.Diff(UnifiedDiffs.between(pathParam, content, revised)));
     }
 
-    private static String replaced(final String content, final ToolParams params) {
-        return content.replace(params.string("old_string").orElse(""), params.string("new_string").orElse(""));
+    /**
+     * The model composes strings from read_file output, which joins lines with \n — so against a
+     * CRLF file its old_string would never match. Adapt the search and replacement text to the
+     * file's own line separator instead of failing the whole read-edit loop.
+     */
+    private static String adaptedToFile(final String content, final String text) {
+        if (!content.contains("\r\n")) {
+            return text;
+        }
+        return text.replace("\r\n", "\n").replace("\n", "\r\n");
     }
 
     private static String fallbackPreview(final ToolParams params) {

@@ -22,4 +22,14 @@ public interface FileSystem {
     List<String> list(Path directory);
 
     boolean exists(Path path);
+
+    /** The file's size in bytes. */
+    long size(Path path);
+
+    /**
+     * The regular files under the project matching a glob (e.g. {@code **}{@code /*.java}),
+     * sorted, confined to the project boundary. Well-known noise directories (VCS internals,
+     * build output, IDE metadata) are pruned from the walk. Used by the search tools.
+     */
+    List<Path> find(String glob);
 }

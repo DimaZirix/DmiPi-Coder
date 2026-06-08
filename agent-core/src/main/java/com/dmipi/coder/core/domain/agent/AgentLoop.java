@@ -15,10 +15,10 @@ import com.dmipi.coder.core.domain.tool.ToolParamsParser;
 import com.dmipi.coder.core.domain.tool.ToolRegistry;
 import com.dmipi.coder.core.domain.tool.ToolResult;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 /**
  * The turn loop: a turn runs as steps — the model speaks and requests tool calls; each call is
@@ -62,7 +62,7 @@ public final class AgentLoop {
                 out.event(new OutEvent.TurnEnded());
                 return;
             }
-            out.event(new OutEvent.TurnFailed(String.valueOf(failure.getMessage())));
+            out.event(new OutEvent.TurnFailed(failure.getMessage() != null ? failure.getMessage() : failure.toString()));
         }
     }
 
@@ -92,7 +92,8 @@ public final class AgentLoop {
 
     private Step streamStep(final CancelToken cancel) {
         final StringBuilder text = new StringBuilder();
-        final Map<Integer, PendingCall> pending = new LinkedHashMap<>();
+        // Keyed and iterated by wire index: fragments may arrive out of order, execution may not.
+        final Map<Integer, PendingCall> pending = new TreeMap<>();
         models.active().client().stream(new ChatRequest(conversation.messages(), tools.schemas()), cancel, event -> {
             switch (event) {
                 case LlmStreamEvent.TextDelta(final String delta) -> {

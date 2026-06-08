@@ -43,7 +43,7 @@ class FilesPluginsIntegrationTest {
         // Then
         assertThat(client.requests().getFirst().tools())
                 .extracting(ToolSchema::name)
-                .containsExactly("read_file", "list_directory");
+                .containsExactly("read_file", "list_directory", "glob", "grep_search");
     }
 
     @Test
