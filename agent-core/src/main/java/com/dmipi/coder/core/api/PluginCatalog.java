@@ -2,6 +2,7 @@ package com.dmipi.coder.core.api;
 
 import com.dmipi.coder.core.domain.llm.ProtocolProvider;
 import com.dmipi.coder.core.domain.permissions.PermissionPolicy;
+import com.dmipi.coder.core.domain.shell.SandboxProvider;
 import com.dmipi.coder.core.domain.tool.Tool;
 import com.dmipi.coder.core.plugin.PluginRegistrar;
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ final class PluginCatalog implements PluginRegistrar {
     private final Map<Tool, PermissionPolicy> policies = new IdentityHashMap<>();
     private final List<String> instructionSections = new ArrayList<>();
     private final List<ProtocolProvider> protocolProviders = new ArrayList<>();
+    private final List<SandboxProvider> sandboxProviders = new ArrayList<>();
 
     @Override
     public void registerTool(final Tool tool) {
@@ -39,6 +41,11 @@ final class PluginCatalog implements PluginRegistrar {
         protocolProviders.add(Objects.requireNonNull(provider, "provider"));
     }
 
+    @Override
+    public void registerSandboxProvider(final SandboxProvider provider) {
+        sandboxProviders.add(Objects.requireNonNull(provider, "provider"));
+    }
+
     List<Tool> tools() {
         return List.copyOf(tools);
     }
@@ -53,5 +60,9 @@ final class PluginCatalog implements PluginRegistrar {
 
     List<ProtocolProvider> protocolProviders() {
         return List.copyOf(protocolProviders);
+    }
+
+    List<SandboxProvider> sandboxProviders() {
+        return List.copyOf(sandboxProviders);
     }
 }

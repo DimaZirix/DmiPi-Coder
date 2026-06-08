@@ -12,8 +12,11 @@ import com.dmipi.coder.core.domain.tool.ToolParams;
 import com.dmipi.coder.core.domain.tool.ToolParamsParser;
 import com.dmipi.coder.core.domain.tool.ToolRegistry;
 import com.dmipi.coder.core.domain.tool.ToolResult;
+import com.dmipi.coder.core.domain.shell.ShellResult;
 import com.dmipi.coder.core.plugin.Llms;
+import com.dmipi.coder.core.plugin.Shell;
 import com.dmipi.coder.core.plugin.Tools;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,12 +32,36 @@ final class LateBound {
     private volatile ToolRegistry toolRegistry;
     private volatile ToolGate gate;
     private volatile ToolParamsParser paramsParser;
+    private volatile Shell shell;
 
-    void bind(final ModelRegistry models, final ToolRegistry toolRegistry, final ToolGate gate, final ToolParamsParser paramsParser) {
+    void bind(final ModelRegistry models, final ToolRegistry toolRegistry, final ToolGate gate, final ToolParamsParser paramsParser, final Shell shell) {
         this.models = models;
         this.toolRegistry = toolRegistry;
         this.gate = gate;
         this.paramsParser = paramsParser;
+        this.shell = shell;
+    }
+
+    Shell shell() {
+        return new Shell() {
+
+            @Override
+            public ShellResult run(final String command, final CancelToken cancel) {
+                return boundShell().run(command, cancel);
+            }
+
+            @Override
+            public ShellResult run(final String command, final Optional<Duration> timeout, final CancelToken cancel) {
+                return boundShell().run(command, timeout, cancel);
+            }
+        };
+    }
+
+    private Shell boundShell() {
+        if (shell == null) {
+            throw new IllegalStateException("The Shell capability is not usable during install — hold it and call it later.");
+        }
+        return shell;
     }
 
     Llms llms() {

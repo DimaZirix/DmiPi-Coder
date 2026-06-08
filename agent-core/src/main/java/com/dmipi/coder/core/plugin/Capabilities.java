@@ -15,14 +15,16 @@ public final class Capabilities {
     private final Configuration configuration;
     private final Tools tools;
     private final FileSystem fileSystem;
+    private final Shell shell;
 
-    public Capabilities(final Hil hil, final Output output, final Llms llms, final Configuration configuration, final Tools tools, final FileSystem fileSystem) {
+    public Capabilities(final Hil hil, final Output output, final Llms llms, final Configuration configuration, final Tools tools, final FileSystem fileSystem, final Shell shell) {
         this.hil = hil;
         this.output = output;
         this.llms = llms;
         this.configuration = configuration;
         this.tools = tools;
         this.fileSystem = fileSystem;
+        this.shell = shell;
     }
 
     /** The view a plugin sees: only what it declared, of what is granted. */
@@ -33,7 +35,8 @@ public final class Capabilities {
                 declared.contains(CapabilityType.LLM) ? llms : null,
                 declared.contains(CapabilityType.CONFIGURATION) ? configuration : null,
                 declared.contains(CapabilityType.TOOLS) ? tools : null,
-                declared.contains(CapabilityType.FILE_SYSTEM) ? fileSystem : null);
+                declared.contains(CapabilityType.FILE_SYSTEM) ? fileSystem : null,
+                declared.contains(CapabilityType.SHELL) ? shell : null);
     }
 
     public Hil hil() {
@@ -58,6 +61,10 @@ public final class Capabilities {
 
     public FileSystem fileSystem() {
         return present(fileSystem, CapabilityType.FILE_SYSTEM);
+    }
+
+    public Shell shell() {
+        return present(shell, CapabilityType.SHELL);
     }
 
     private static <T> T present(final T capability, final CapabilityType type) {

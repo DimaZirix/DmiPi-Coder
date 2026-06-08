@@ -10,5 +10,6 @@ public enum CapabilityType {
     LLM,
     CONFIGURATION,
     TOOLS,
-    FILE_SYSTEM
+    FILE_SYSTEM,
+    SHELL
 }

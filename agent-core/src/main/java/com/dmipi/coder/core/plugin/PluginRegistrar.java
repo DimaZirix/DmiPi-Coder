@@ -2,6 +2,7 @@ package com.dmipi.coder.core.plugin;
 
 import com.dmipi.coder.core.domain.llm.ProtocolProvider;
 import com.dmipi.coder.core.domain.permissions.PermissionPolicy;
+import com.dmipi.coder.core.domain.shell.SandboxProvider;
 import com.dmipi.coder.core.domain.tool.Tool;
 
 /**
@@ -19,4 +20,7 @@ public interface PluginRegistrar {
 
     /** A provider contribution: an LLM protocol implementation, matched to model declarations by name. */
     void registerProtocolProvider(ProtocolProvider provider);
+
+    /** A provider contribution: a sandbox technology, matched to the configured technology name. */
+    void registerSandboxProvider(SandboxProvider provider);
 }
