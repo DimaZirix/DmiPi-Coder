@@ -13,6 +13,11 @@ public interface Tool {
 
     ToolKind kind();
 
+    /** The kind of this specific call, for a tool whose actions differ in effect; defaults to {@link #kind()}. */
+    default ToolKind kind(final ToolParams params) {
+        return kind();
+    }
+
     ParameterSchema parameterSchema();
 
     /** Cheap synchronous validation; empty means OK, else the error the model can correct from. */

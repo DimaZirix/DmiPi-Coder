@@ -55,11 +55,11 @@ public final class PermissionGate implements ToolGate {
 
     @Override
     public GateDecision decide(final Tool tool, final ToolParams params) {
-        if (mode == Mode.PLAN && tool.kind().mutates()) {
+        if (mode == Mode.PLAN && tool.kind(params).mutates()) {
             return new GateDecision.Denied("Plan mode is active: mutating calls are blocked until the plan is approved.");
         }
 
-        final PermissionDecision decision = softened(tool, composed(tool, params));
+        final PermissionDecision decision = softened(tool, params, composed(tool, params));
         return switch (decision) {
             case ALLOW -> new GateDecision.Allowed();
             case DENY -> new GateDecision.Denied("The call is denied by policy.");
@@ -77,8 +77,8 @@ public final class PermissionGate implements ToolGate {
     }
 
     /** Allow-edits auto-approves an edit that would only have asked; it never touches a DENY. */
-    private PermissionDecision softened(final Tool tool, final PermissionDecision decision) {
-        if (mode == Mode.ALLOW_EDITS && tool.kind() == ToolKind.EDIT && decision == PermissionDecision.ASK) {
+    private PermissionDecision softened(final Tool tool, final ToolParams params, final PermissionDecision decision) {
+        if (mode == Mode.ALLOW_EDITS && tool.kind(params) == ToolKind.EDIT && decision == PermissionDecision.ASK) {
             return PermissionDecision.ALLOW;
         }
         return decision;

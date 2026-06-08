@@ -220,7 +220,7 @@ public final class Coder implements AutoCloseable {
 
             final PermissionGate gate = new PermissionGate(hil, mode);
             final LateBound lateBound = new LateBound();
-            final Capabilities granted = new Capabilities(hil, text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), lateBound.shell());
+            final Capabilities granted = new Capabilities(hil, text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), new AnchoredFileSystem(userDirectory), lateBound.shell());
 
             final PluginCatalog catalog = new PluginCatalog();
             for (final Plugin plugin : plugins) {

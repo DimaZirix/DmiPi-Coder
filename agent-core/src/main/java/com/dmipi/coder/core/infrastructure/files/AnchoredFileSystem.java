@@ -15,16 +15,16 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
 
-/** The core's file-system capability: every path is resolved and confined inside the project directory. */
+/** The core's file-system capability: every path is resolved and confined inside its anchor directory (the project, or the user directory for user-scope state). */
 public final class AnchoredFileSystem implements FileSystem {
 
     /** Noise the search walk prunes: VCS internals, build output, dependency caches, IDE and agent metadata. */
     private static final Set<String> IGNORED_DIRECTORIES = Set.of(".git", ".idea", ".llmcode", "target", "build", "dist", "out", "node_modules");
 
-    private final Path projectDirectory;
+    private final Path anchor;
 
-    public AnchoredFileSystem(final Path projectDirectory) {
-        this.projectDirectory = Objects.requireNonNull(projectDirectory, "projectDirectory").toAbsolutePath().normalize();
+    public AnchoredFileSystem(final Path anchor) {
+        this.anchor = Objects.requireNonNull(anchor, "anchor").toAbsolutePath().normalize();
     }
 
     @Override
@@ -32,9 +32,9 @@ public final class AnchoredFileSystem implements FileSystem {
         if (userPath == null || userPath.isBlank()) {
             throw new IllegalArgumentException("A path is required.");
         }
-        final Path resolved = projectDirectory.resolve(userPath).normalize();
-        if (!resolved.startsWith(projectDirectory)) {
-            throw new IllegalArgumentException("The path '" + userPath + "' escapes the project directory.");
+        final Path resolved = anchor.resolve(userPath).normalize();
+        if (!resolved.startsWith(anchor)) {
+            throw new IllegalArgumentException("The path '" + userPath + "' escapes the anchored directory.");
         }
         return resolved;
     }
@@ -94,11 +94,11 @@ public final class AnchoredFileSystem implements FileSystem {
         final PathMatcher matcher = rootTolerantMatcher(glob);
         final List<Path> matches = new ArrayList<>();
         try {
-            Files.walkFileTree(projectDirectory, new SimpleFileVisitor<>() {
+            Files.walkFileTree(anchor, new SimpleFileVisitor<>() {
 
                 @Override
                 public FileVisitResult preVisitDirectory(final Path directory, final BasicFileAttributes attributes) {
-                    if (!directory.equals(projectDirectory) && IGNORED_DIRECTORIES.contains(directory.getFileName().toString())) {
+                    if (!directory.equals(anchor) && IGNORED_DIRECTORIES.contains(directory.getFileName().toString())) {
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     return FileVisitResult.CONTINUE;
@@ -106,7 +106,7 @@ public final class AnchoredFileSystem implements FileSystem {
 
                 @Override
                 public FileVisitResult visitFile(final Path file, final BasicFileAttributes attributes) {
-                    if (attributes.isRegularFile() && matcher.matches(projectDirectory.relativize(file))) {
+                    if (attributes.isRegularFile() && matcher.matches(anchor.relativize(file))) {
                         matches.add(file);
                     }
                     return FileVisitResult.CONTINUE;
@@ -118,7 +118,7 @@ public final class AnchoredFileSystem implements FileSystem {
                 }
             });
         } catch (final IOException failure) {
-            throw new UncheckedIOException("Could not search " + projectDirectory + ": " + failure.getMessage(), failure);
+            throw new UncheckedIOException("Could not search " + anchor + ": " + failure.getMessage(), failure);
         }
         matches.sort(Path::compareTo);
         return List.copyOf(matches);
@@ -130,11 +130,11 @@ public final class AnchoredFileSystem implements FileSystem {
      * {@code **}{@code /}) the remainder against a root-level file, the way ripgrep and git do.
      */
     private PathMatcher rootTolerantMatcher(final String glob) {
-        final PathMatcher direct = projectDirectory.getFileSystem().getPathMatcher("glob:" + glob);
+        final PathMatcher direct = anchor.getFileSystem().getPathMatcher("glob:" + glob);
         if (!glob.startsWith("**/")) {
             return direct;
         }
-        final PathMatcher rootLevel = projectDirectory.getFileSystem().getPathMatcher("glob:" + glob.substring("**/".length()));
+        final PathMatcher rootLevel = anchor.getFileSystem().getPathMatcher("glob:" + glob.substring("**/".length()));
         return path -> direct.matches(path) || rootLevel.matches(path);
     }
 

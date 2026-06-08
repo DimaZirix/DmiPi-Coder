@@ -15,15 +15,17 @@ public final class Capabilities {
     private final Configuration configuration;
     private final Tools tools;
     private final FileSystem fileSystem;
+    private final FileSystem userFileSystem;
     private final Shell shell;
 
-    public Capabilities(final Hil hil, final Output output, final Llms llms, final Configuration configuration, final Tools tools, final FileSystem fileSystem, final Shell shell) {
+    public Capabilities(final Hil hil, final Output output, final Llms llms, final Configuration configuration, final Tools tools, final FileSystem fileSystem, final FileSystem userFileSystem, final Shell shell) {
         this.hil = hil;
         this.output = output;
         this.llms = llms;
         this.configuration = configuration;
         this.tools = tools;
         this.fileSystem = fileSystem;
+        this.userFileSystem = userFileSystem;
         this.shell = shell;
     }
 
@@ -36,6 +38,7 @@ public final class Capabilities {
                 declared.contains(CapabilityType.CONFIGURATION) ? configuration : null,
                 declared.contains(CapabilityType.TOOLS) ? tools : null,
                 declared.contains(CapabilityType.FILE_SYSTEM) ? fileSystem : null,
+                declared.containsAll(Set.of(CapabilityType.FILE_SYSTEM, CapabilityType.CONFIGURATION)) ? userFileSystem : null,
                 declared.contains(CapabilityType.SHELL) ? shell : null);
     }
 
@@ -61,6 +64,18 @@ public final class Capabilities {
 
     public FileSystem fileSystem() {
         return present(fileSystem, CapabilityType.FILE_SYSTEM);
+    }
+
+    /**
+     * File access anchored at the <em>user directory</em> instead of the project — the seam for
+     * user-scope state such as user memory. Requires declaring both FILE_SYSTEM (file access)
+     * and CONFIGURATION (knowing the anchors); either alone does not grant it.
+     */
+    public FileSystem userFileSystem() {
+        if (userFileSystem == null) {
+            throw new IllegalStateException("The user-scope file system requires declaring both FILE_SYSTEM and CONFIGURATION in Plugin.requires().");
+        }
+        return userFileSystem;
     }
 
     public Shell shell() {
