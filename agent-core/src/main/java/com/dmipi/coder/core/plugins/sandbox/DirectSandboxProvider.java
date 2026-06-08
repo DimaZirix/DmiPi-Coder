@@ -1,4 +1,4 @@
-package com.dmipi.coder.core.plugins.shell;
+package com.dmipi.coder.core.plugins.sandbox;
 
 import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.shell.Sandbox;

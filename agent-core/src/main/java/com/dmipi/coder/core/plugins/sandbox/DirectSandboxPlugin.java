@@ -1,4 +1,4 @@
-package com.dmipi.coder.core.plugins.shell;
+package com.dmipi.coder.core.plugins.sandbox;
 
 import com.dmipi.coder.core.plugin.Capabilities;
 import com.dmipi.coder.core.plugin.Plugin;

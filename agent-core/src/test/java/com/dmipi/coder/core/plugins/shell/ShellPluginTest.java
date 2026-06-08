@@ -11,6 +11,7 @@ import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.llm.ProtocolProvider;
 import com.dmipi.coder.core.domain.llm.Tier;
 import com.dmipi.coder.core.domain.llm.ToolSchema;
+import com.dmipi.coder.core.plugins.sandbox.DirectSandboxPlugin;
 import com.dmipi.coder.core.plugin.Capabilities;
 import com.dmipi.coder.core.plugin.Plugin;
 import com.dmipi.coder.core.plugin.PluginRegistrar;
