@@ -1,5 +1,6 @@
 package com.dmipi.coder.core.domain.event;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -21,6 +22,29 @@ public sealed interface Display {
 
         public Diff {
             Objects.requireNonNull(unifiedDiff, "unifiedDiff");
+        }
+    }
+
+    /** The agent's task list, replacing whatever was shown before; items keep the given order. */
+    record Todo(List<Item> items) implements Display {
+
+        public Todo {
+            items = List.copyOf(items);
+        }
+
+        public enum Status {
+            PENDING,
+            IN_PROGRESS,
+            COMPLETED
+        }
+
+        /** One task on the list. */
+        public record Item(String text, Status status) {
+
+            public Item {
+                Objects.requireNonNull(text, "text");
+                Objects.requireNonNull(status, "status");
+            }
         }
     }
 }

@@ -1,0 +1,136 @@
+package com.dmipi.coder.core.plugins.planning;
+
+import com.dmipi.coder.core.domain.agent.CancelToken;
+import com.dmipi.coder.core.domain.event.Display;
+import com.dmipi.coder.core.domain.permissions.PermissionDecision;
+import com.dmipi.coder.core.domain.tool.ParameterSchema;
+import com.dmipi.coder.core.domain.tool.Tool;
+import com.dmipi.coder.core.domain.tool.ToolKind;
+import com.dmipi.coder.core.domain.tool.ToolParams;
+import com.dmipi.coder.core.domain.tool.ToolResult;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * Replaces the agent's task list. Never asks and never mutates anything — the list reaches the
+ * user as a {@link Display.Todo} payload, and the model reads back a one-line tally.
+ */
+final class TodoWriteTool implements Tool {
+
+    private static final JsonMapper MAPPER = JsonMapper.builder().build();
+    private static final String SCHEMA = """
+            {
+              "type": "object",
+              "required": ["todos"],
+              "properties": {
+                "todos": {
+                  "type": "array",
+                  "description": "The full task list; it replaces the previous list entirely.",
+                  "items": {
+                    "type": "object",
+                    "required": ["content", "status"],
+                    "properties": {
+                      "content": {"type": "string", "description": "The task, as one short imperative sentence."},
+                      "status": {"type": "string", "enum": ["pending", "in_progress", "completed"]}
+                    }
+                  }
+                }
+              }
+            }""";
+
+    @Override
+    public String name() {
+        return "todo_write";
+    }
+
+    @Override
+    public String description() {
+        return "Replaces the task list shown to the user. Send the complete list on every call: planned tasks as pending, the one being worked on as in_progress, finished ones as completed.";
+    }
+
+    @Override
+    public ToolKind kind() {
+        return ToolKind.OTHER;
+    }
+
+    @Override
+    public ParameterSchema parameterSchema() {
+        return new ParameterSchema(SCHEMA);
+    }
+
+    @Override
+    public Optional<String> validate(final ToolParams params) {
+        try {
+            parse(params);
+        } catch (final IllegalArgumentException error) {
+            return Optional.of(error.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public PermissionDecision defaultPermission(final ToolParams params) {
+        return PermissionDecision.ALLOW;
+    }
+
+    @Override
+    public String callSummary(final ToolParams params) {
+        try {
+            return tally(parse(params));
+        } catch (final IllegalArgumentException error) {
+            return "";
+        }
+    }
+
+    @Override
+    public ToolResult execute(final ToolParams params, final CancelToken cancel) {
+        final List<Display.Todo.Item> items = parse(params);
+        return new ToolResult.Success("The task list now shows " + tally(items) + ".", new Display.Todo(items));
+    }
+
+    private static List<Display.Todo.Item> parse(final ToolParams params) {
+        final JsonNode todos = MAPPER.readTree(params.rawJson()).path("todos");
+        if (!todos.isArray()) {
+            throw new IllegalArgumentException("Parameter 'todos' is required and must be an array.");
+        }
+        final List<Display.Todo.Item> items = new ArrayList<>();
+        for (final JsonNode todo : todos) {
+            items.add(item(todo));
+        }
+        return items;
+    }
+
+    private static Display.Todo.Item item(final JsonNode todo) {
+        final JsonNode content = todo.path("content");
+        if (!content.isString() || content.stringValue().isBlank()) {
+            throw new IllegalArgumentException("Each todo needs a non-empty 'content' string.");
+        }
+        return new Display.Todo.Item(content.stringValue(), status(todo.path("status")));
+    }
+
+    private static Display.Todo.Status status(final JsonNode status) {
+        return switch (status.isString() ? status.stringValue() : "") {
+            case "pending" -> Display.Todo.Status.PENDING;
+            case "in_progress" -> Display.Todo.Status.IN_PROGRESS;
+            case "completed" -> Display.Todo.Status.COMPLETED;
+            default -> throw new IllegalArgumentException("Each todo needs a 'status' of pending, in_progress or completed.");
+        };
+    }
+
+    private static String tally(final List<Display.Todo.Item> items) {
+        final long completed = count(items, Display.Todo.Status.COMPLETED);
+        final long inProgress = count(items, Display.Todo.Status.IN_PROGRESS);
+        final long pending = count(items, Display.Todo.Status.PENDING);
+        return items.size() + " task" + (items.size() == 1 ? "" : "s")
+                + " (" + completed + " completed, " + inProgress + " in progress, " + pending + " pending)";
+    }
+
+    private static long count(final List<Display.Todo.Item> items, final Display.Todo.Status status) {
+        return items.stream()
+                .filter(item -> item.status() == status)
+                .count();
+    }
+}
