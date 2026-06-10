@@ -15,9 +15,11 @@ import com.dmipi.coder.core.domain.shell.SandboxProvider;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 import com.dmipi.coder.core.domain.tool.ToolRegistry;
 import com.dmipi.coder.core.infrastructure.files.AnchoredFileSystem;
+import com.dmipi.coder.core.infrastructure.http.GuardedHttpClient;
 import com.dmipi.coder.core.infrastructure.json.JacksonToolParamsParser;
 import com.dmipi.coder.core.infrastructure.shell.SessionShell;
 import com.dmipi.coder.core.plugin.Capabilities;
+import com.dmipi.coder.core.plugin.Http;
 import com.dmipi.coder.core.plugin.CapabilityType;
 import com.dmipi.coder.core.plugin.Configuration;
 import com.dmipi.coder.core.plugin.Plugin;
@@ -138,6 +140,7 @@ public final class Coder implements AutoCloseable {
         private String sandboxTechnology = "direct";
         private Duration shellDefaultTimeout = Duration.ofSeconds(120);
         private Duration shellMaxTimeout = Duration.ofSeconds(600);
+        private Http http = new GuardedHttpClient();
 
         private Builder() {
         }
@@ -211,6 +214,12 @@ public final class Coder implements AutoCloseable {
             return this;
         }
 
+        /** Replaces the guarded default http capability — an embedder or test seam, not a way to relax the guards lightly. */
+        public Builder http(final Http http) {
+            this.http = Objects.requireNonNull(http, "http");
+            return this;
+        }
+
         public Coder build() {
             Objects.requireNonNull(out, "The out channel is required.");
             Objects.requireNonNull(hil, "The HIL channel is required.");
@@ -220,7 +229,7 @@ public final class Coder implements AutoCloseable {
 
             final PermissionGate gate = new PermissionGate(hil, mode);
             final LateBound lateBound = new LateBound();
-            final Capabilities granted = new Capabilities(hil, text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), new AnchoredFileSystem(userDirectory), lateBound.shell());
+            final Capabilities granted = new Capabilities(hil, text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), new AnchoredFileSystem(userDirectory), http, lateBound.shell());
 
             final PluginCatalog catalog = new PluginCatalog();
             for (final Plugin plugin : plugins) {

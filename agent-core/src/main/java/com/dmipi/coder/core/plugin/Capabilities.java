@@ -16,9 +16,10 @@ public final class Capabilities {
     private final Tools tools;
     private final FileSystem fileSystem;
     private final FileSystem userFileSystem;
+    private final Http http;
     private final Shell shell;
 
-    public Capabilities(final Hil hil, final Output output, final Llms llms, final Configuration configuration, final Tools tools, final FileSystem fileSystem, final FileSystem userFileSystem, final Shell shell) {
+    public Capabilities(final Hil hil, final Output output, final Llms llms, final Configuration configuration, final Tools tools, final FileSystem fileSystem, final FileSystem userFileSystem, final Http http, final Shell shell) {
         this.hil = hil;
         this.output = output;
         this.llms = llms;
@@ -26,6 +27,7 @@ public final class Capabilities {
         this.tools = tools;
         this.fileSystem = fileSystem;
         this.userFileSystem = userFileSystem;
+        this.http = http;
         this.shell = shell;
     }
 
@@ -39,6 +41,7 @@ public final class Capabilities {
                 declared.contains(CapabilityType.TOOLS) ? tools : null,
                 declared.contains(CapabilityType.FILE_SYSTEM) ? fileSystem : null,
                 declared.containsAll(Set.of(CapabilityType.FILE_SYSTEM, CapabilityType.CONFIGURATION)) ? userFileSystem : null,
+                declared.contains(CapabilityType.HTTP) ? http : null,
                 declared.contains(CapabilityType.SHELL) ? shell : null);
     }
 
@@ -76,6 +79,10 @@ public final class Capabilities {
             throw new IllegalStateException("The user-scope file system requires declaring both FILE_SYSTEM and CONFIGURATION in Plugin.requires().");
         }
         return userFileSystem;
+    }
+
+    public Http http() {
+        return present(http, CapabilityType.HTTP);
     }
 
     public Shell shell() {
