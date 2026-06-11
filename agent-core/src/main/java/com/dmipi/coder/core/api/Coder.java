@@ -6,6 +6,7 @@ import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.agent.ContextManager;
 import com.dmipi.coder.core.domain.agent.Conversation;
 import com.dmipi.coder.core.domain.agent.In;
+import com.dmipi.coder.core.domain.agent.NextSpeakerCheck;
 import com.dmipi.coder.core.domain.event.Out;
 import com.dmipi.coder.core.domain.event.OutEvent;
 import com.dmipi.coder.core.domain.hil.Hil;
@@ -183,6 +184,7 @@ public final class Coder implements AutoCloseable {
         };
         private boolean sessionsGranted;
         private double compactionThreshold = 0.7;
+        private boolean nextSpeakerCheck;
 
         private Builder() {
         }
@@ -307,6 +309,16 @@ public final class Coder implements AutoCloseable {
             return this;
         }
 
+        /**
+         * Enables the next-speaker check: a step ending in plain text is judged by the fast tier
+         * — a stalled "I will now…" gets one nudge to continue. Off by default: it costs one
+         * extra model call per turn ending. Worth enabling for local models that stop mid-work.
+         */
+        public Builder nextSpeakerCheck() {
+            this.nextSpeakerCheck = true;
+            return this;
+        }
+
         public Coder build() {
             Objects.requireNonNull(out, "The out channel is required.");
             Objects.requireNonNull(hil, "The HIL channel is required.");
@@ -337,7 +349,8 @@ public final class Coder implements AutoCloseable {
 
             final Conversation conversation = new Conversation(systemInstructions(catalog));
             final ContextManager contextManager = new ContextManager(registry, compactionThreshold, out);
-            final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn, contextManager);
+            final NextSpeakerCheck nextSpeaker = nextSpeakerCheck ? new NextSpeakerCheck(registry) : null;
+            final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn, contextManager, nextSpeaker);
             final SessionStore sessions = sessionsGranted ? new SessionStore(projectDirectory.resolve(".coder/sessions")) : null;
             return new Coder(loop, registry, gate, out, in, sessionShell, conversation, sessions);
         }

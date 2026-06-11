@@ -42,23 +42,24 @@ public final class AgentLoop {
     private final Out out;
     private final int maxStepsPerTurn;
     private final ContextManager contextManager;
+    private final NextSpeakerCheck nextSpeaker;
 
     /** The main loop follows the registry's active model, so a runtime switch applies mid-conversation. */
     public AgentLoop(final Conversation conversation, final ModelRegistry models, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn) {
-        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn, null);
+        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn, null, null);
     }
 
     /** A nested (subagent) loop runs on one fixed client for its whole life; its context is throwaway — no compaction. */
     public AgentLoop(final Conversation conversation, final Supplier<LlmClient> client, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn) {
-        this(conversation, client, tools, gate, paramsParser, out, maxStepsPerTurn, null);
+        this(conversation, client, tools, gate, paramsParser, out, maxStepsPerTurn, null, null);
     }
 
-    /** The fully wired main loop, keeping the conversation inside the window through the context manager. */
-    public AgentLoop(final Conversation conversation, final ModelRegistry models, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn, final ContextManager contextManager) {
-        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn, contextManager);
+    /** The fully wired main loop: context kept inside the window, stalled steps nudged through the next-speaker check. */
+    public AgentLoop(final Conversation conversation, final ModelRegistry models, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn, final ContextManager contextManager, final NextSpeakerCheck nextSpeaker) {
+        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn, contextManager, nextSpeaker);
     }
 
-    private AgentLoop(final Conversation conversation, final Supplier<LlmClient> client, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn, final ContextManager contextManager) {
+    private AgentLoop(final Conversation conversation, final Supplier<LlmClient> client, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn, final ContextManager contextManager, final NextSpeakerCheck nextSpeaker) {
         this.conversation = conversation;
         this.client = client;
         this.tools = tools;
@@ -67,6 +68,7 @@ public final class AgentLoop {
         this.out = out;
         this.maxStepsPerTurn = maxStepsPerTurn;
         this.contextManager = contextManager;
+        this.nextSpeaker = nextSpeaker;
     }
 
     /** Runs one full turn for the user input; the conversation stays usable whatever the ending. */
@@ -87,6 +89,7 @@ public final class AgentLoop {
 
     private void runSteps(final CancelToken cancel) {
         final LoopDetector loopDetector = new LoopDetector();
+        boolean nudged = false;
         for (int step = 1; step <= maxStepsPerTurn; step++) {
             if (cancel.isCancelled()) {
                 return;
@@ -98,7 +101,13 @@ public final class AgentLoop {
             final Step result = streamStep(cancel);
             conversation.add(ChatMessage.assistant(result.text(), result.toolCalls()));
             if (result.toolCalls().isEmpty()) {
-                return;
+                // One nudge per turn: a model that stalls again after being told to continue gets the turn back to the user.
+                if (nudged || nextSpeaker == null || cancel.isCancelled() || !nextSpeaker.modelShouldContinue(result.text(), cancel)) {
+                    return;
+                }
+                nudged = true;
+                conversation.add(ChatMessage.user("[Your last message announced more work. Continue and finish it now.]"));
+                continue;
             }
             if (loopDetector.repetitionDetected(result.toolCalls())) {
                 out.event(new OutEvent.AnswerDelta(REPETITION_NOTE));
