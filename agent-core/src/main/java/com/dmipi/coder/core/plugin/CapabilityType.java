@@ -12,5 +12,6 @@ public enum CapabilityType {
     TOOLS,
     FILE_SYSTEM,
     HTTP,
-    SHELL
+    SHELL,
+    CONVERSATIONS
 }

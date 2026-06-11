@@ -13,6 +13,7 @@ import com.dmipi.coder.core.domain.llm.ModelRegistry;
 import com.dmipi.coder.core.domain.permissions.Mode;
 import com.dmipi.coder.core.domain.shell.SandboxProvider;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
+import com.dmipi.coder.core.domain.tool.Tool;
 import com.dmipi.coder.core.domain.tool.ToolRegistry;
 import com.dmipi.coder.core.infrastructure.files.AnchoredFileSystem;
 import com.dmipi.coder.core.infrastructure.http.GuardedHttpClient;
@@ -141,6 +142,8 @@ public final class Coder implements AutoCloseable {
         private Duration shellDefaultTimeout = Duration.ofSeconds(120);
         private Duration shellMaxTimeout = Duration.ofSeconds(600);
         private Http http = new GuardedHttpClient();
+        private Out subagentOut = event -> {
+        };
 
         private Builder() {
         }
@@ -220,6 +223,12 @@ public final class Coder implements AutoCloseable {
             return this;
         }
 
+        /** The separate out channel subagent activity streams through; without one, subagent events are dropped. */
+        public Builder subagentOut(final Out subagentOut) {
+            this.subagentOut = Objects.requireNonNull(subagentOut, "subagentOut");
+            return this;
+        }
+
         public Coder build() {
             Objects.requireNonNull(out, "The out channel is required.");
             Objects.requireNonNull(hil, "The HIL channel is required.");
@@ -229,11 +238,15 @@ public final class Coder implements AutoCloseable {
 
             final PermissionGate gate = new PermissionGate(hil, mode);
             final LateBound lateBound = new LateBound();
-            final Capabilities granted = new Capabilities(hil, text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), new AnchoredFileSystem(userDirectory), http, lateBound.shell());
+            final ConversationsEngine conversationsEngine = new ConversationsEngine();
 
             final PluginCatalog catalog = new PluginCatalog();
+            final List<List<Tool>> toolsByPlugin = new ArrayList<>();
             for (final Plugin plugin : plugins) {
+                final int before = catalog.tools().size();
+                final Capabilities granted = new Capabilities(hil, text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), new AnchoredFileSystem(userDirectory), http, lateBound.shell(), conversationsEngine.forPlugin(toolsByPlugin.size()));
                 plugin.install(catalog, granted.restrictedTo(plugin.requires()));
+                toolsByPlugin.add(catalog.tools().subList(before, catalog.tools().size()));
             }
 
             final ModelRegistry registry = new ModelRegistry(models, catalog.protocolProviders());
@@ -242,6 +255,7 @@ public final class Coder implements AutoCloseable {
             final JacksonToolParamsParser paramsParser = new JacksonToolParamsParser(JsonMapper.builder().build());
             final SessionShell sessionShell = resolveShell(catalog);
             lateBound.bind(registry, toolRegistry, gate, paramsParser, sessionShell);
+            conversationsEngine.bind(registry, gate, paramsParser, subagentOut, toolsByPlugin);
 
             final Conversation conversation = new Conversation(systemInstructions(catalog));
             final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn);

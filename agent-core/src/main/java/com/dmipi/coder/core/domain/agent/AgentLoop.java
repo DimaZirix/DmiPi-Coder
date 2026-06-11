@@ -4,6 +4,7 @@ import com.dmipi.coder.core.domain.event.Out;
 import com.dmipi.coder.core.domain.event.OutEvent;
 import com.dmipi.coder.core.domain.llm.ChatMessage;
 import com.dmipi.coder.core.domain.llm.ChatRequest;
+import com.dmipi.coder.core.domain.llm.LlmClient;
 import com.dmipi.coder.core.domain.llm.LlmStreamEvent;
 import com.dmipi.coder.core.domain.llm.ModelRegistry;
 import com.dmipi.coder.core.domain.llm.ToolCall;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.function.Supplier;
 
 /**
  * The turn loop: a turn runs as steps — the model speaks and requests tool calls; each call is
@@ -33,16 +35,22 @@ public final class AgentLoop {
     private static final String REPETITION_NOTE = "\n[The turn was stopped: the model kept repeating the same tool call.]";
 
     private final Conversation conversation;
-    private final ModelRegistry models;
+    private final Supplier<LlmClient> client;
     private final ToolRegistry tools;
     private final ToolGate gate;
     private final ToolParamsParser paramsParser;
     private final Out out;
     private final int maxStepsPerTurn;
 
+    /** The main loop follows the registry's active model, so a runtime switch applies mid-conversation. */
     public AgentLoop(final Conversation conversation, final ModelRegistry models, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn) {
+        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn);
+    }
+
+    /** A nested (subagent) loop runs on one fixed client for its whole life. */
+    public AgentLoop(final Conversation conversation, final Supplier<LlmClient> client, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn) {
         this.conversation = conversation;
-        this.models = models;
+        this.client = client;
         this.tools = tools;
         this.gate = gate;
         this.paramsParser = paramsParser;
@@ -94,7 +102,7 @@ public final class AgentLoop {
         final StringBuilder text = new StringBuilder();
         // Keyed and iterated by wire index: fragments may arrive out of order, execution may not.
         final Map<Integer, PendingCall> pending = new TreeMap<>();
-        models.active().client().stream(new ChatRequest(conversation.messages(), tools.schemas()), cancel, event -> {
+        client.get().stream(new ChatRequest(conversation.messages(), tools.schemas()), cancel, event -> {
             switch (event) {
                 case LlmStreamEvent.TextDelta(final String delta) -> {
                     text.append(delta);

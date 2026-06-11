@@ -18,6 +18,11 @@ public interface Tool {
         return kind();
     }
 
+    /** True for a tool bound to main-session state (the todo list, plan gate); such tools are never inherited by subagents. */
+    default boolean mainOnly() {
+        return false;
+    }
+
     ParameterSchema parameterSchema();
 
     /** Cheap synchronous validation; empty means OK, else the error the model can correct from. */

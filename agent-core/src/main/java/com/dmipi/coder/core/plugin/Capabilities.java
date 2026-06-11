@@ -18,8 +18,9 @@ public final class Capabilities {
     private final FileSystem userFileSystem;
     private final Http http;
     private final Shell shell;
+    private final Conversations conversations;
 
-    public Capabilities(final Hil hil, final Output output, final Llms llms, final Configuration configuration, final Tools tools, final FileSystem fileSystem, final FileSystem userFileSystem, final Http http, final Shell shell) {
+    public Capabilities(final Hil hil, final Output output, final Llms llms, final Configuration configuration, final Tools tools, final FileSystem fileSystem, final FileSystem userFileSystem, final Http http, final Shell shell, final Conversations conversations) {
         this.hil = hil;
         this.output = output;
         this.llms = llms;
@@ -29,6 +30,7 @@ public final class Capabilities {
         this.userFileSystem = userFileSystem;
         this.http = http;
         this.shell = shell;
+        this.conversations = conversations;
     }
 
     /** The view a plugin sees: only what it declared, of what is granted. */
@@ -42,7 +44,8 @@ public final class Capabilities {
                 declared.contains(CapabilityType.FILE_SYSTEM) ? fileSystem : null,
                 declared.containsAll(Set.of(CapabilityType.FILE_SYSTEM, CapabilityType.CONFIGURATION)) ? userFileSystem : null,
                 declared.contains(CapabilityType.HTTP) ? http : null,
-                declared.contains(CapabilityType.SHELL) ? shell : null);
+                declared.contains(CapabilityType.SHELL) ? shell : null,
+                declared.contains(CapabilityType.CONVERSATIONS) ? conversations : null);
     }
 
     public Hil hil() {
@@ -87,6 +90,10 @@ public final class Capabilities {
 
     public Shell shell() {
         return present(shell, CapabilityType.SHELL);
+    }
+
+    public Conversations conversations() {
+        return present(conversations, CapabilityType.CONVERSATIONS);
     }
 
     private static <T> T present(final T capability, final CapabilityType type) {

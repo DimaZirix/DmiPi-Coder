@@ -56,6 +56,12 @@ final class TodoWriteTool implements Tool {
         return ToolKind.OTHER;
     }
 
+    /** The todo list is main-session state; a subagent never inherits this tool. */
+    @Override
+    public boolean mainOnly() {
+        return true;
+    }
+
     @Override
     public ParameterSchema parameterSchema() {
         return new ParameterSchema(SCHEMA);
