@@ -18,6 +18,7 @@ import com.dmipi.coder.core.domain.tool.ToolRegistry;
 import com.dmipi.coder.core.infrastructure.files.AnchoredFileSystem;
 import com.dmipi.coder.core.infrastructure.http.GuardedHttpClient;
 import com.dmipi.coder.core.infrastructure.json.JacksonToolParamsParser;
+import com.dmipi.coder.core.infrastructure.sessions.SessionStore;
 import com.dmipi.coder.core.infrastructure.settings.Settings;
 import com.dmipi.coder.core.infrastructure.settings.SettingsLoader;
 import com.dmipi.coder.core.infrastructure.shell.SessionShell;
@@ -48,15 +49,19 @@ public final class Coder implements AutoCloseable {
     private final Out out;
     private final In in;
     private final AutoCloseable sessionShell;
+    private final Conversation conversation;
+    private final SessionStore sessions;
     private volatile CancelToken currentTurn;
 
-    private Coder(final AgentLoop agentLoop, final ModelRegistry models, final PermissionGate gate, final Out out, final In in, final AutoCloseable sessionShell) {
+    private Coder(final AgentLoop agentLoop, final ModelRegistry models, final PermissionGate gate, final Out out, final In in, final AutoCloseable sessionShell, final Conversation conversation, final SessionStore sessions) {
         this.agentLoop = agentLoop;
         this.models = models;
         this.gate = gate;
         this.out = out;
         this.in = in;
         this.sessionShell = sessionShell;
+        this.conversation = conversation;
+        this.sessions = sessions;
     }
 
     /** Releases session resources — currently the sandbox, if one was created. */
@@ -125,6 +130,34 @@ public final class Coder implements AutoCloseable {
         gate.switchMode(mode);
     }
 
+    /** The saved session names, under the session grant. */
+    public List<String> sessions() {
+        return store().list();
+    }
+
+    /** Persists the dialogue (never the instructions) under the given name; overwrites a previous save of that name. */
+    public void saveSession(final String name) {
+        store().save(name, conversation.messages());
+    }
+
+    /**
+     * Continues a saved session: its dialogue is appended under the freshly built instructions.
+     * Only a conversation with no history yet can resume — resume first, then talk.
+     */
+    public void resumeSession(final String name) {
+        if (conversation.messages().size() > 1) {
+            throw new IllegalStateException("This conversation already has history — resume before the first turn.");
+        }
+        store().load(name).forEach(conversation::add);
+    }
+
+    private SessionStore store() {
+        if (sessions == null) {
+            throw new IllegalStateException("Session persistence is not granted: enable it with Builder.enableSessions().");
+        }
+        return sessions;
+    }
+
     /** Collects the configuration; {@link #build()} assembles and installs everything. */
     public static final class Builder {
 
@@ -147,6 +180,7 @@ public final class Coder implements AutoCloseable {
         private Http http = new GuardedHttpClient();
         private Out subagentOut = event -> {
         };
+        private boolean sessionsGranted;
 
         private Builder() {
         }
@@ -259,6 +293,12 @@ public final class Coder implements AutoCloseable {
             return this;
         }
 
+        /** The grant to persist sessions under {@code .coder/sessions} in the project; ungranted, save/resume fail loudly. */
+        public Builder enableSessions() {
+            this.sessionsGranted = true;
+            return this;
+        }
+
         public Coder build() {
             Objects.requireNonNull(out, "The out channel is required.");
             Objects.requireNonNull(hil, "The HIL channel is required.");
@@ -289,7 +329,8 @@ public final class Coder implements AutoCloseable {
 
             final Conversation conversation = new Conversation(systemInstructions(catalog));
             final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn);
-            return new Coder(loop, registry, gate, out, in, sessionShell);
+            final SessionStore sessions = sessionsGranted ? new SessionStore(projectDirectory.resolve(".coder/sessions")) : null;
+            return new Coder(loop, registry, gate, out, in, sessionShell, conversation, sessions);
         }
 
         /** Builds the session shell from the configured sandbox provider, or fails clearly when a shell-using plugin has none. */
