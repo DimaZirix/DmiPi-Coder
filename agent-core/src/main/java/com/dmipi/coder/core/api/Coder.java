@@ -18,6 +18,8 @@ import com.dmipi.coder.core.domain.tool.ToolRegistry;
 import com.dmipi.coder.core.infrastructure.files.AnchoredFileSystem;
 import com.dmipi.coder.core.infrastructure.http.GuardedHttpClient;
 import com.dmipi.coder.core.infrastructure.json.JacksonToolParamsParser;
+import com.dmipi.coder.core.infrastructure.settings.Settings;
+import com.dmipi.coder.core.infrastructure.settings.SettingsLoader;
 import com.dmipi.coder.core.infrastructure.shell.SessionShell;
 import com.dmipi.coder.core.plugin.Capabilities;
 import com.dmipi.coder.core.plugin.Http;
@@ -141,6 +143,7 @@ public final class Coder implements AutoCloseable {
         private String sandboxTechnology = "direct";
         private Duration shellDefaultTimeout = Duration.ofSeconds(120);
         private Duration shellMaxTimeout = Duration.ofSeconds(600);
+        private final List<Path> additionalWritableDirectories = new ArrayList<>();
         private Http http = new GuardedHttpClient();
         private Out subagentOut = event -> {
         };
@@ -201,6 +204,33 @@ public final class Coder implements AutoCloseable {
         /** The current path — the project worked on; the anchor for project-scope locations. */
         public Builder projectDirectory(final Path projectDirectory) {
             this.projectDirectory = projectDirectory.toAbsolutePath().normalize();
+            return this;
+        }
+
+        /**
+         * The grant to read the user settings file ({@code .coder/settings.json} under the user
+         * directory) — read now, applied onto the builder, so call it after setting the anchors
+         * and before project settings or explicit overrides. Missing file → nothing changes.
+         */
+        public Builder loadUserSettings() {
+            return apply(SettingsLoader.load(userDirectory));
+        }
+
+        /** The grant to read the project settings file; where both scopes speak, the later call wins — project after user. */
+        public Builder loadProjectSettings() {
+            return apply(SettingsLoader.load(projectDirectory));
+        }
+
+        private Builder apply(final Settings settings) {
+            for (final ModelDeclaration declared : settings.models()) {
+                models.removeIf(existing -> existing.name().equals(declared.name()));
+                models.add(declared);
+            }
+            settings.mode().ifPresent(this::mode);
+            settings.sandboxTechnology().ifPresent(this::sandbox);
+            additionalWritableDirectories.addAll(settings.additionalWritableDirectories());
+            settings.shellDefaultTimeout().ifPresent(timeout -> shellDefaultTimeout = timeout);
+            settings.shellMaxTimeout().ifPresent(timeout -> shellMaxTimeout = timeout);
             return this;
         }
 
@@ -269,7 +299,7 @@ public final class Coder implements AutoCloseable {
                     .filter(candidate -> candidate.technology().equals(sandboxTechnology))
                     .findFirst();
             if (provider.isPresent()) {
-                return new SessionShell(provider.orElseThrow(), new SandboxSpec(projectDirectory, List.of(), shellDefaultTimeout, shellMaxTimeout));
+                return new SessionShell(provider.orElseThrow(), new SandboxSpec(projectDirectory, additionalWritableDirectories, shellDefaultTimeout, shellMaxTimeout));
             }
             if (plugins.stream().anyMatch(plugin -> plugin.requires().contains(CapabilityType.SHELL))) {
                 throw new IllegalStateException("A plugin requires the shell capability, but no sandbox provider for technology '" + sandboxTechnology + "' is registered. Register a sandbox provider plugin (e.g. DirectSandboxPlugin) or set a different technology via Builder.sandbox(...).");
