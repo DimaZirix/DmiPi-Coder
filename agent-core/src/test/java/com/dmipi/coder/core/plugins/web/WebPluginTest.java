@@ -138,7 +138,7 @@ class WebPluginTest {
                 .out(out)
                 .hil(hil)
                 .model(MODEL)
-                .http(url -> new Http.Response("text/plain", "irrelevant"))
+                .http(fixedHttp())
                 .registerPlugin(providerPlugin(client))
                 .registerPlugin(new WebPlugin())
                 .build()) {
@@ -169,6 +169,21 @@ class WebPluginTest {
 
     private static Http permissiveHttp() {
         return new GuardedHttpClient(host -> false);
+    }
+
+    private static Http fixedHttp() {
+        return new Http() {
+
+            @Override
+            public Response fetch(final String url) {
+                return new Response("text/plain", "irrelevant");
+            }
+
+            @Override
+            public Exchange post(final String url, final String body, final java.util.Map<String, String> headers, final java.time.Duration timeout) {
+                throw new UnsupportedOperationException();
+            }
+        };
     }
 
     private ToolParams params(final String json) {

@@ -11,7 +11,9 @@ import java.net.http.HttpResponse;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -44,6 +46,40 @@ public final class GuardedHttpClient implements Http {
     /** Test seam: loopback stubs would otherwise be refused by the private-address screen. */
     public GuardedHttpClient(final Predicate<String> privateHost) {
         this.privateHost = privateHost;
+    }
+
+    @Override
+    public Exchange post(final String url, final String body, final Map<String, String> headers, final Duration timeout) {
+        try {
+            final URI target = URI.create(url);
+            final String scheme = target.getScheme() == null ? "" : target.getScheme().toLowerCase(Locale.ROOT);
+            if (!scheme.equals("http") && !scheme.equals("https")) {
+                throw new IOException("refusing a non-http(s) URL (" + target + ")");
+            }
+            final HttpRequest.Builder request = HttpRequest.newBuilder(target)
+                    .timeout(timeout)
+                    .POST(HttpRequest.BodyPublishers.ofString(body));
+            headers.forEach(request::header);
+            final HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
+            return new Exchange(response.statusCode(), contentType(response), body(response), firstValues(response));
+        } catch (final IOException failure) {
+            throw new UncheckedIOException("Could not post to " + url + ": " + failure.getMessage(), failure);
+        } catch (final InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new UncheckedIOException("Interrupted while posting to " + url + ".", new IOException(interrupted));
+        } catch (final IllegalArgumentException invalid) {
+            throw new UncheckedIOException("Not a postable URL: " + url, new IOException(invalid));
+        }
+    }
+
+    private static Map<String, String> firstValues(final HttpResponse<?> response) {
+        final Map<String, String> headers = new HashMap<>();
+        response.headers().map().forEach((name, values) -> {
+            if (!values.isEmpty()) {
+                headers.put(name.toLowerCase(Locale.ROOT), values.getFirst());
+            }
+        });
+        return headers;
     }
 
     @Override
