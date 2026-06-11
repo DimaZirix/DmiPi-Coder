@@ -41,14 +41,24 @@ public final class AgentLoop {
     private final ToolParamsParser paramsParser;
     private final Out out;
     private final int maxStepsPerTurn;
+    private final ContextManager contextManager;
 
     /** The main loop follows the registry's active model, so a runtime switch applies mid-conversation. */
     public AgentLoop(final Conversation conversation, final ModelRegistry models, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn) {
-        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn);
+        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn, null);
     }
 
-    /** A nested (subagent) loop runs on one fixed client for its whole life. */
+    /** A nested (subagent) loop runs on one fixed client for its whole life; its context is throwaway — no compaction. */
     public AgentLoop(final Conversation conversation, final Supplier<LlmClient> client, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn) {
+        this(conversation, client, tools, gate, paramsParser, out, maxStepsPerTurn, null);
+    }
+
+    /** The fully wired main loop, keeping the conversation inside the window through the context manager. */
+    public AgentLoop(final Conversation conversation, final ModelRegistry models, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn, final ContextManager contextManager) {
+        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn, contextManager);
+    }
+
+    private AgentLoop(final Conversation conversation, final Supplier<LlmClient> client, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn, final ContextManager contextManager) {
         this.conversation = conversation;
         this.client = client;
         this.tools = tools;
@@ -56,6 +66,7 @@ public final class AgentLoop {
         this.paramsParser = paramsParser;
         this.out = out;
         this.maxStepsPerTurn = maxStepsPerTurn;
+        this.contextManager = contextManager;
     }
 
     /** Runs one full turn for the user input; the conversation stays usable whatever the ending. */
@@ -79,6 +90,9 @@ public final class AgentLoop {
         for (int step = 1; step <= maxStepsPerTurn; step++) {
             if (cancel.isCancelled()) {
                 return;
+            }
+            if (contextManager != null) {
+                contextManager.maybeCompact(conversation, cancel);
             }
 
             final Step result = streamStep(cancel);

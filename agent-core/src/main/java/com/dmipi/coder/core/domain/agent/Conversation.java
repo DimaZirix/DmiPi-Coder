@@ -25,4 +25,20 @@ public final class Conversation {
     public void add(final ChatMessage message) {
         messages.add(Objects.requireNonNull(message, "message"));
     }
+
+    /**
+     * Replaces the history before {@code keepFromIndex} with the given summary message; the
+     * system instructions and the tail from that index stay as they are.
+     */
+    public void compact(final int keepFromIndex, final ChatMessage summary) {
+        if (keepFromIndex < 1 || keepFromIndex > messages.size()) {
+            throw new IllegalArgumentException("keepFromIndex must be within the history, got " + keepFromIndex + ".");
+        }
+        final List<ChatMessage> kept = new ArrayList<>(messages.subList(keepFromIndex, messages.size()));
+        final ChatMessage instructions = messages.getFirst();
+        messages.clear();
+        messages.add(instructions);
+        messages.add(Objects.requireNonNull(summary, "summary"));
+        messages.addAll(kept);
+    }
 }

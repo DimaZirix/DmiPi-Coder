@@ -3,6 +3,7 @@ package com.dmipi.coder.core.api;
 import com.dmipi.coder.core.application.permissions.PermissionGate;
 import com.dmipi.coder.core.domain.agent.AgentLoop;
 import com.dmipi.coder.core.domain.agent.CancelToken;
+import com.dmipi.coder.core.domain.agent.ContextManager;
 import com.dmipi.coder.core.domain.agent.Conversation;
 import com.dmipi.coder.core.domain.agent.In;
 import com.dmipi.coder.core.domain.event.Out;
@@ -181,6 +182,7 @@ public final class Coder implements AutoCloseable {
         private Out subagentOut = event -> {
         };
         private boolean sessionsGranted;
+        private double compactionThreshold = 0.7;
 
         private Builder() {
         }
@@ -299,6 +301,12 @@ public final class Coder implements AutoCloseable {
             return this;
         }
 
+        /** The fraction of the active model's window that triggers compaction; conservative by default (0.7). */
+        public Builder compactionThreshold(final double compactionThreshold) {
+            this.compactionThreshold = compactionThreshold;
+            return this;
+        }
+
         public Coder build() {
             Objects.requireNonNull(out, "The out channel is required.");
             Objects.requireNonNull(hil, "The HIL channel is required.");
@@ -328,7 +336,8 @@ public final class Coder implements AutoCloseable {
             conversationsEngine.bind(registry, gate, paramsParser, subagentOut, toolsByPlugin);
 
             final Conversation conversation = new Conversation(systemInstructions(catalog));
-            final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn);
+            final ContextManager contextManager = new ContextManager(registry, compactionThreshold, out);
+            final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn, contextManager);
             final SessionStore sessions = sessionsGranted ? new SessionStore(projectDirectory.resolve(".coder/sessions")) : null;
             return new Coder(loop, registry, gate, out, in, sessionShell, conversation, sessions);
         }
