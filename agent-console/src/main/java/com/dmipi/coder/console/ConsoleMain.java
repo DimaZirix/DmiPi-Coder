@@ -1,6 +1,8 @@
 package com.dmipi.coder.console;
 
 import com.dmipi.coder.core.api.Coder;
+import com.dmipi.coder.core.domain.llm.ModelDeclaration;
+import com.dmipi.coder.core.domain.llm.Tier;
 import com.dmipi.coder.core.plugins.files.FilesEditPlugin;
 import com.dmipi.coder.core.plugins.files.FilesReadPlugin;
 import com.dmipi.coder.core.plugins.memory.MemoryPlugin;
@@ -16,11 +18,15 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 
 /**
- * A runnable console wiring: reads settings from the project, grants the common local plugins,
- * and drives the loop over standard in/out. Models come from {@code .coder/settings.json} — with
- * none declared, the build fails clearly, which is the honest signal to configure one.
+ * A runnable console wiring: a default model declared here in Java, then overlaid by the user and
+ * project {@code .coder/settings.json} (a settings model of the same name replaces the default),
+ * the common local plugins granted, and the loop driven over standard in/out.
  */
 public final class ConsoleMain {
+
+    /** The out-of-the-box model — edit here, or override in {@code .coder/settings.json} by declaring a model named "local". */
+    private static final ModelDeclaration DEFAULT_MODEL =
+            new ModelDeclaration("local", "openai", "http://localhost:1234/v1", Tier.FAST, 32_000);
 
     private ConsoleMain() {
     }
@@ -38,6 +44,7 @@ public final class ConsoleMain {
                     .subagentOut(renderer.forSubagents())
                     .hil(new ConsoleHil(input, output))
                     .projectDirectory(project)
+                    .model(DEFAULT_MODEL)
                     .loadUserSettings()
                     .loadProjectSettings()
                     .enableSessions()
@@ -53,7 +60,7 @@ public final class ConsoleMain {
         } catch (final IllegalStateException misconfigured) {
             output.println("Cannot start: " + misconfigured.getMessage());
             output.println();
-            output.println("Declare at least one model in .coder/settings.json (project or user), e.g.:");
+            output.println("A default model is built in; override it in .coder/settings.json (project or user), e.g.:");
             output.println(EXAMPLE_SETTINGS);
             output.flush();
             return;
