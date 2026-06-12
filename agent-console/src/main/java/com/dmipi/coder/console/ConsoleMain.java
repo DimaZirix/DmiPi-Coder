@@ -4,6 +4,7 @@ import com.dmipi.coder.core.api.Coder;
 import com.dmipi.coder.core.plugins.files.FilesEditPlugin;
 import com.dmipi.coder.core.plugins.files.FilesReadPlugin;
 import com.dmipi.coder.core.plugins.memory.MemoryPlugin;
+import com.dmipi.coder.core.plugins.openai.OpenAiProviderPlugin;
 import com.dmipi.coder.core.plugins.planning.PlanningPlugin;
 import com.dmipi.coder.core.plugins.sandbox.DirectSandboxPlugin;
 import com.dmipi.coder.core.plugins.shell.ShellPlugin;
@@ -30,23 +31,49 @@ public final class ConsoleMain {
         final PrintWriter output = new PrintWriter(System.out, true, StandardCharsets.UTF_8);
         final ConsoleRenderer renderer = new ConsoleRenderer(output);
 
-        try (Coder coder = Coder.builder()
-                .out(renderer)
-                .subagentOut(renderer.forSubagents())
-                .hil(new ConsoleHil(input, output))
-                .projectDirectory(project)
-                .loadUserSettings()
-                .loadProjectSettings()
-                .enableSessions()
-                .nextSpeakerCheck()
-                .registerPlugin(new FilesReadPlugin())
-                .registerPlugin(new FilesEditPlugin())
-                .registerPlugin(new PlanningPlugin())
-                .registerPlugin(new MemoryPlugin())
-                .registerPlugin(new DirectSandboxPlugin())
-                .registerPlugin(new ShellPlugin())
-                .build()) {
+        final Coder coder;
+        try {
+            coder = Coder.builder()
+                    .out(renderer)
+                    .subagentOut(renderer.forSubagents())
+                    .hil(new ConsoleHil(input, output))
+                    .projectDirectory(project)
+                    .loadUserSettings()
+                    .loadProjectSettings()
+                    .enableSessions()
+                    .nextSpeakerCheck()
+                    .registerPlugin(new OpenAiProviderPlugin())
+                    .registerPlugin(new FilesReadPlugin())
+                    .registerPlugin(new FilesEditPlugin())
+                    .registerPlugin(new PlanningPlugin())
+                    .registerPlugin(new MemoryPlugin())
+                    .registerPlugin(new DirectSandboxPlugin())
+                    .registerPlugin(new ShellPlugin())
+                    .build();
+        } catch (final IllegalStateException misconfigured) {
+            output.println("Cannot start: " + misconfigured.getMessage());
+            output.println();
+            output.println("Declare at least one model in .coder/settings.json (project or user), e.g.:");
+            output.println(EXAMPLE_SETTINGS);
+            output.flush();
+            return;
+        }
+
+        try (coder) {
             new Console(coder, input, output, Console.autosaveNameFor(LocalDateTime.now())).run();
         }
     }
+
+    private static final String EXAMPLE_SETTINGS = """
+            {
+              "models": [
+                {
+                  "name": "local",
+                  "protocol": "openai",
+                  "endpoint": "http://localhost:1234/v1",
+                  "tier": "fast",
+                  "contextWindow": 32000
+                }
+              ]
+            }""";
 }
