@@ -1,6 +1,7 @@
 package com.dmipi.coder.core.api;
 
 import com.dmipi.coder.core.application.permissions.PermissionGate;
+import com.dmipi.coder.core.application.prompt.PromptAssembler;
 import com.dmipi.coder.core.domain.agent.AgentLoop;
 import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.agent.ContextManager;
@@ -38,7 +39,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -382,13 +382,12 @@ public final class Coder implements AutoCloseable {
         }
 
         private String systemInstructions(final PluginCatalog catalog) {
-            final String sections = catalog.instructionSections()
-                    .stream()
-                    .collect(Collectors.joining("\n\n"));
-            if (sections.isBlank()) {
-                return instructions;
-            }
-            return instructions.isBlank() ? sections : instructions + "\n\n" + sections;
+            // Slot order: core instructions first, plugin sections last. Later phases insert
+            // conditional sections, worked examples and environment between the two.
+            return new PromptAssembler()
+                    .add(instructions)
+                    .addAll(catalog.instructionSections())
+                    .assemble();
         }
     }
 }
