@@ -6,9 +6,11 @@ import com.dmipi.coder.core.domain.hil.Option;
 import com.dmipi.coder.core.domain.hil.Question;
 import com.dmipi.coder.core.domain.hil.QuestionKind;
 import com.dmipi.coder.core.domain.permissions.GateDecision;
+import com.dmipi.coder.core.domain.permissions.HardLimits;
 import com.dmipi.coder.core.domain.permissions.Mode;
 import com.dmipi.coder.core.domain.permissions.PermissionDecision;
 import com.dmipi.coder.core.domain.permissions.PermissionPolicy;
+import com.dmipi.coder.core.domain.permissions.PermissionRules;
 import com.dmipi.coder.core.domain.tool.Tool;
 import com.dmipi.coder.core.domain.tool.ToolGate;
 import com.dmipi.coder.core.domain.tool.ToolKind;
@@ -17,6 +19,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * The permission layer: non-removable, interposed on every call. Composes the tool's baseline
@@ -33,11 +36,19 @@ public final class PermissionGate implements ToolGate {
     private final Hil hil;
     private final SessionApprovals approvals = new SessionApprovals();
     private final Map<Tool, PermissionPolicy> policies = new IdentityHashMap<>();
+    private final PermissionRules rules;
+    private final HardLimits hardLimits;
     private volatile Mode mode;
 
     public PermissionGate(final Hil hil, final Mode mode) {
+        this(hil, mode, PermissionRules.none(), new HardLimits());
+    }
+
+    public PermissionGate(final Hil hil, final Mode mode, final PermissionRules rules, final HardLimits hardLimits) {
         this.hil = Objects.requireNonNull(hil, "hil");
         this.mode = Objects.requireNonNull(mode, "mode");
+        this.rules = Objects.requireNonNull(rules, "rules");
+        this.hardLimits = Objects.requireNonNull(hardLimits, "hardLimits");
     }
 
     public Mode mode() {
@@ -55,11 +66,25 @@ public final class PermissionGate implements ToolGate {
 
     @Override
     public GateDecision decide(final Tool tool, final ToolParams params) {
+        final Optional<String> forbidden = hardLimits.refusal(tool, params);
+        if (forbidden.isPresent()) {
+            return new GateDecision.Denied(forbidden.orElseThrow());
+        }
         if (mode == Mode.PLAN && tool.kind(params).mutates()) {
             return new GateDecision.Denied("Plan mode is active: mutating calls are blocked until the plan is approved.");
         }
 
-        final PermissionDecision decision = softened(tool, params, composed(tool, params));
+        final Optional<PermissionDecision> rule = rules.decisionFor(tool, params);
+        if (rule.filter(decision -> decision == PermissionDecision.DENY).isPresent()) {
+            return new GateDecision.Denied("A settings rule denies this call.");
+        }
+
+        final PermissionDecision composed = softened(tool, params, composed(tool, params));
+        if (composed == PermissionDecision.DENY) {
+            return new GateDecision.Denied("The call is denied by policy.");
+        }
+        // An operator allow-rule converts an ask into a run — but only after every deny check above.
+        final PermissionDecision decision = rule.filter(value -> value == PermissionDecision.ALLOW).orElse(composed);
         return switch (decision) {
             case ALLOW -> new GateDecision.Allowed();
             case DENY -> new GateDecision.Denied("The call is denied by policy.");

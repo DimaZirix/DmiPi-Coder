@@ -12,7 +12,10 @@ import com.dmipi.coder.core.domain.event.OutEvent;
 import com.dmipi.coder.core.domain.hil.Hil;
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.llm.ModelRegistry;
+import com.dmipi.coder.core.domain.permissions.HardLimits;
 import com.dmipi.coder.core.domain.permissions.Mode;
+import com.dmipi.coder.core.domain.permissions.PermissionRule;
+import com.dmipi.coder.core.domain.permissions.PermissionRules;
 import com.dmipi.coder.core.domain.shell.SandboxProvider;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 import com.dmipi.coder.core.domain.tool.Tool;
@@ -179,6 +182,7 @@ public final class Coder implements AutoCloseable {
         private Duration shellDefaultTimeout = Duration.ofSeconds(120);
         private Duration shellMaxTimeout = Duration.ofSeconds(600);
         private final List<Path> additionalWritableDirectories = new ArrayList<>();
+        private final List<PermissionRule> permissionRules = new ArrayList<>();
         private Http http = new GuardedHttpClient();
         private Out subagentOut = event -> {
         };
@@ -269,6 +273,13 @@ public final class Coder implements AutoCloseable {
             additionalWritableDirectories.addAll(settings.additionalWritableDirectories());
             settings.shellDefaultTimeout().ifPresent(timeout -> shellDefaultTimeout = timeout);
             settings.shellMaxTimeout().ifPresent(timeout -> shellMaxTimeout = timeout);
+            permissionRules.addAll(settings.permissionRules());
+            return this;
+        }
+
+        /** Adds a permission rule directly, as an alternative to declaring it in settings. */
+        public Builder permissionRule(final PermissionRule rule) {
+            permissionRules.add(Objects.requireNonNull(rule, "rule"));
             return this;
         }
 
@@ -326,7 +337,7 @@ public final class Coder implements AutoCloseable {
                 throw new IllegalStateException("At least one model must be declared.");
             }
 
-            final PermissionGate gate = new PermissionGate(hil, mode);
+            final PermissionGate gate = new PermissionGate(hil, mode, new PermissionRules(permissionRules), new HardLimits());
             final LateBound lateBound = new LateBound();
             final ConversationsEngine conversationsEngine = new ConversationsEngine();
 

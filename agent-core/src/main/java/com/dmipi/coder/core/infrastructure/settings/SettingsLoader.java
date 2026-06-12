@@ -3,6 +3,8 @@ package com.dmipi.coder.core.infrastructure.settings;
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.llm.Tier;
 import com.dmipi.coder.core.domain.permissions.Mode;
+import com.dmipi.coder.core.domain.permissions.PermissionDecision;
+import com.dmipi.coder.core.domain.permissions.PermissionRule;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -56,13 +58,29 @@ public final class SettingsLoader {
             writable.add(Path.of(directory.stringValue()));
         }
         final JsonNode shell = root.path("shell");
+        final List<PermissionRule> permissionRules = new ArrayList<>();
+        for (final JsonNode rule : root.path("permissions")) {
+            permissionRules.add(permissionRule(rule, file));
+        }
         return new Settings(
                 models,
                 text(root, "mode").map(value -> parsed(value, Mode.class, file)),
                 text(sandbox, "technology"),
                 writable,
                 seconds(shell, "defaultTimeoutSeconds", file),
-                seconds(shell, "maxTimeoutSeconds", file));
+                seconds(shell, "maxTimeoutSeconds", file),
+                permissionRules);
+    }
+
+    private static PermissionRule permissionRule(final JsonNode rule, final Path file) {
+        try {
+            return new PermissionRule(
+                    text(rule, "tool").orElse("*"),
+                    text(rule, "argument").orElse(""),
+                    parsed(text(rule, "decision").orElse(""), PermissionDecision.class, file));
+        } catch (final IllegalArgumentException invalid) {
+            throw new IllegalStateException("Invalid permission rule in " + file + ": " + invalid.getMessage());
+        }
     }
 
     private static ModelDeclaration model(final JsonNode model, final Path file) {

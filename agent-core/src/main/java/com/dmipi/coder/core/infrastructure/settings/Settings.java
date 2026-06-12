@@ -2,6 +2,7 @@ package com.dmipi.coder.core.infrastructure.settings;
 
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.permissions.Mode;
+import com.dmipi.coder.core.domain.permissions.PermissionRule;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -14,14 +15,16 @@ public record Settings(
         Optional<String> sandboxTechnology,
         List<Path> additionalWritableDirectories,
         Optional<Duration> shellDefaultTimeout,
-        Optional<Duration> shellMaxTimeout) {
+        Optional<Duration> shellMaxTimeout,
+        List<PermissionRule> permissionRules) {
 
     public Settings {
         models = List.copyOf(models);
         additionalWritableDirectories = List.copyOf(additionalWritableDirectories);
+        permissionRules = List.copyOf(permissionRules);
     }
 
     public static Settings empty() {
-        return new Settings(List.of(), Optional.empty(), Optional.empty(), List.of(), Optional.empty(), Optional.empty());
+        return new Settings(List.of(), Optional.empty(), Optional.empty(), List.of(), Optional.empty(), Optional.empty(), List.of());
     }
 }
