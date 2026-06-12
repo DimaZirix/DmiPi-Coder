@@ -26,7 +26,7 @@ public final class ConsoleMain {
 
     /** The out-of-the-box model — edit here, or override in {@code .coder/settings.json} by declaring a model named "local". */
     private static final ModelDeclaration DEFAULT_MODEL =
-            new ModelDeclaration("local", "openai", "http://localhost:1234/v1", Tier.FAST, 32_000);
+            new ModelDeclaration("local", "openai", "http://localhost:8080/v1", Tier.BALANCED, 128_000);
 
     private ConsoleMain() {
     }
