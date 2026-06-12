@@ -11,6 +11,7 @@
 
     <modules>
         <module>agent-core</module>
+        <module>agent-console</module>
     </modules>
 
     <properties>
