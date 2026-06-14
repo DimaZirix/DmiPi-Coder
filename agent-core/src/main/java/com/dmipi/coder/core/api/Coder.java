@@ -2,6 +2,7 @@ package com.dmipi.coder.core.api;
 
 import com.dmipi.coder.core.application.permissions.PermissionGate;
 import com.dmipi.coder.core.application.prompt.PromptAssembler;
+import com.dmipi.coder.core.application.prompt.PromptResources;
 import com.dmipi.coder.core.domain.agent.AgentLoop;
 import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.agent.ContextManager;
@@ -358,7 +359,7 @@ public final class Coder implements AutoCloseable {
             lateBound.bind(registry, toolRegistry, gate, paramsParser, sessionShell);
             conversationsEngine.bind(registry, gate, paramsParser, subagentOut, toolsByPlugin);
 
-            final Conversation conversation = new Conversation(systemInstructions(catalog));
+            final Conversation conversation = new Conversation(systemInstructions(catalog, sessionShell));
             final ContextManager contextManager = new ContextManager(registry, compactionThreshold, out);
             final NextSpeakerCheck nextSpeaker = nextSpeakerCheck ? new NextSpeakerCheck(registry) : null;
             final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn, contextManager, nextSpeaker);
@@ -381,13 +382,30 @@ public final class Coder implements AutoCloseable {
             return null;
         }
 
-        private String systemInstructions(final PluginCatalog catalog) {
-            // Slot order: core instructions first, plugin sections last. Later phases insert
-            // conditional sections, worked examples and environment between the two.
+        private String systemInstructions(final PluginCatalog catalog, final SessionShell sessionShell) {
+            // Slot order: core → conditional (sandbox/git) → plugin sections last. Later phases
+            // insert worked examples and environment between the conditionals and the plugins.
             return new PromptAssembler()
                     .add(instructions)
+                    .add(sandboxSection(sessionShell))
+                    .add(gitSection())
                     .addAll(catalog.instructionSections())
                     .assemble();
+        }
+
+        /** The sandbox section, true to reality — present only with a shell, inside vs. outside by the provider's confinement. */
+        private static String sandboxSection(final SessionShell sessionShell) {
+            if (sessionShell == null) {
+                return "";
+            }
+            return PromptResources.load(sessionShell.confines() ? "inside-sandbox.md" : "outside-sandbox.md");
+        }
+
+        /** The git section, present only when the project directory is a git repository. */
+        private String gitSection() {
+            return java.nio.file.Files.isDirectory(projectDirectory.resolve(".git"))
+                    ? PromptResources.load("git-repository.md")
+                    : "";
         }
     }
 }

@@ -24,6 +24,11 @@ public final class DirectSandboxProvider implements SandboxProvider {
     }
 
     @Override
+    public boolean confines() {
+        return false;
+    }
+
+    @Override
     public Sandbox create(final SandboxSpec spec) {
         return new DirectSandbox(spec);
     }

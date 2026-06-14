@@ -14,5 +14,8 @@ public interface SandboxProvider {
     /** True when this technology is available on the host (e.g. its binary is installed). */
     boolean available();
 
+    /** True when this technology actually confines commands; false for the honest {@code direct} no-op. Known before a sandbox is built, so the prompt can tell the model the truth. */
+    boolean confines();
+
     Sandbox create(SandboxSpec spec);
 }

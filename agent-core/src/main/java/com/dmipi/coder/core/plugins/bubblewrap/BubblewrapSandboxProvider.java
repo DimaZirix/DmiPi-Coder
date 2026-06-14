@@ -38,6 +38,11 @@ public final class BubblewrapSandboxProvider implements SandboxProvider {
     }
 
     @Override
+    public boolean confines() {
+        return true;
+    }
+
+    @Override
     public Sandbox create(final SandboxSpec spec) {
         final BubblewrapSandbox sandbox = new BubblewrapSandbox(spec);
         probe(sandbox);

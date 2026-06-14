@@ -26,6 +26,11 @@ public final class SessionShell implements Shell, AutoCloseable {
         this.spec = spec;
     }
 
+    /** True when the configured provider actually confines commands — known without building the sandbox. */
+    public boolean confines() {
+        return provider.confines();
+    }
+
     @Override
     public ShellResult run(final String command, final CancelToken cancel) {
         return run(command, Optional.empty(), cancel);
