@@ -1,6 +1,7 @@
 package com.dmipi.coder.console;
 
 import com.dmipi.coder.core.api.Coder;
+import com.dmipi.coder.core.application.prompt.CorePrompt;
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.llm.Tier;
 import com.dmipi.coder.core.plugins.files.FilesEditPlugin;
@@ -43,6 +44,7 @@ public final class ConsoleMain {
                     .out(renderer)
                     .subagentOut(renderer.forSubagents())
                     .hil(new ConsoleHil(input, output))
+                    .instructions(CorePrompt.standard())
                     .projectDirectory(project)
                     .model(DEFAULT_MODEL)
                     .loadUserSettings()
