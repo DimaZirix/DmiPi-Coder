@@ -1,6 +1,7 @@
 package com.dmipi.coder.core.api;
 
 import com.dmipi.coder.core.application.permissions.PermissionGate;
+import com.dmipi.coder.core.application.prompt.EnvironmentFacts;
 import com.dmipi.coder.core.application.prompt.PromptAssembler;
 import com.dmipi.coder.core.application.prompt.PromptResources;
 import com.dmipi.coder.core.domain.agent.AgentLoop;
@@ -190,6 +191,8 @@ public final class Coder implements AutoCloseable {
         private boolean sessionsGranted;
         private double compactionThreshold = 0.7;
         private boolean nextSpeakerCheck;
+        private boolean gatherEnvironment;
+        private EnvironmentFacts environment;
 
         private Builder() {
         }
@@ -321,6 +324,18 @@ public final class Coder implements AutoCloseable {
             return this;
         }
 
+        /** The grant to gather environment facts (cwd, OS, model, git) into the system prompt; ungranted, no environment block. */
+        public Builder gatherEnvironment() {
+            this.gatherEnvironment = true;
+            return this;
+        }
+
+        /** Supplies environment facts explicitly instead of gathering them — a test tells the model a fake host, and it learns nothing real. */
+        public Builder environment(final EnvironmentFacts environment) {
+            this.environment = Objects.requireNonNull(environment, "environment");
+            return this;
+        }
+
         /**
          * Enables the next-speaker check: a step ending in plain text is judged by the fast tier
          * — a stalled "I will now…" gets one nudge to continue. Off by default: it costs one
@@ -359,7 +374,7 @@ public final class Coder implements AutoCloseable {
             lateBound.bind(registry, toolRegistry, gate, paramsParser, sessionShell);
             conversationsEngine.bind(registry, gate, paramsParser, subagentOut, toolsByPlugin);
 
-            final Conversation conversation = new Conversation(systemInstructions(catalog, sessionShell));
+            final Conversation conversation = new Conversation(systemInstructions(catalog, sessionShell, resolveEnvironment(registry)));
             final ContextManager contextManager = new ContextManager(registry, compactionThreshold, out);
             final NextSpeakerCheck nextSpeaker = nextSpeakerCheck ? new NextSpeakerCheck(registry) : null;
             final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn, contextManager, nextSpeaker);
@@ -382,15 +397,31 @@ public final class Coder implements AutoCloseable {
             return null;
         }
 
-        private String systemInstructions(final PluginCatalog catalog, final SessionShell sessionShell) {
-            // Slot order: core → conditional (sandbox/git) → plugin sections last. Later phases
-            // insert worked examples and environment between the conditionals and the plugins.
+        private String systemInstructions(final PluginCatalog catalog, final SessionShell sessionShell, final EnvironmentFacts environmentFacts) {
+            // Slot order: core → conditional (sandbox/git) → environment → plugin sections last.
+            // Phase A4 inserts worked examples between git and environment.
             return new PromptAssembler()
                     .add(instructions)
                     .add(sandboxSection(sessionShell))
                     .add(gitSection())
+                    .add(environmentFacts == null ? "" : environmentFacts.render())
                     .addAll(catalog.instructionSections())
                     .assemble();
+        }
+
+        /** The environment facts to render, under the gather grant or explicit override; null when neither is set. */
+        private EnvironmentFacts resolveEnvironment(final ModelRegistry registry) {
+            if (environment != null) {
+                return environment;
+            }
+            if (!gatherEnvironment) {
+                return null;
+            }
+            return new EnvironmentFacts(
+                    projectDirectory.toString(),
+                    System.getProperty("os.name", "unknown"),
+                    registry.active().declaration().name(),
+                    isGitRepository());
         }
 
         /** The sandbox section, true to reality — present only with a shell, inside vs. outside by the provider's confinement. */
@@ -403,9 +434,11 @@ public final class Coder implements AutoCloseable {
 
         /** The git section, present only when the project directory is a git repository. */
         private String gitSection() {
-            return java.nio.file.Files.isDirectory(projectDirectory.resolve(".git"))
-                    ? PromptResources.load("git-repository.md")
-                    : "";
+            return isGitRepository() ? PromptResources.load("git-repository.md") : "";
+        }
+
+        private boolean isGitRepository() {
+            return java.nio.file.Files.isDirectory(projectDirectory.resolve(".git"));
         }
     }
 }
