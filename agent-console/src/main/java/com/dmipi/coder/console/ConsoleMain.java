@@ -47,6 +47,7 @@ public final class ConsoleMain {
                     .instructions(CorePrompt.standard())
                     .projectDirectory(project)
                     .gatherEnvironment()
+                    .workedExamples()
                     .model(DEFAULT_MODEL)
                     .loadUserSettings()
                     .loadProjectSettings()

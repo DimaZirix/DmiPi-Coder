@@ -193,6 +193,7 @@ public final class Coder implements AutoCloseable {
         private boolean nextSpeakerCheck;
         private boolean gatherEnvironment;
         private EnvironmentFacts environment;
+        private boolean workedExamples;
 
         private Builder() {
         }
@@ -336,6 +337,12 @@ public final class Coder implements AutoCloseable {
             return this;
         }
 
+        /** Includes worked tool-call examples for the active model's style in the system prompt; off by default (empty core). */
+        public Builder workedExamples() {
+            this.workedExamples = true;
+            return this;
+        }
+
         /**
          * Enables the next-speaker check: a step ending in plain text is judged by the fast tier
          * — a stalled "I will now…" gets one nudge to continue. Off by default: it costs one
@@ -374,7 +381,7 @@ public final class Coder implements AutoCloseable {
             lateBound.bind(registry, toolRegistry, gate, paramsParser, sessionShell);
             conversationsEngine.bind(registry, gate, paramsParser, subagentOut, toolsByPlugin);
 
-            final Conversation conversation = new Conversation(systemInstructions(catalog, sessionShell, resolveEnvironment(registry)));
+            final Conversation conversation = new Conversation(systemInstructions(catalog, sessionShell, registry, resolveEnvironment(registry)));
             final ContextManager contextManager = new ContextManager(registry, compactionThreshold, out);
             final NextSpeakerCheck nextSpeaker = nextSpeakerCheck ? new NextSpeakerCheck(registry) : null;
             final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn, contextManager, nextSpeaker);
@@ -397,16 +404,25 @@ public final class Coder implements AutoCloseable {
             return null;
         }
 
-        private String systemInstructions(final PluginCatalog catalog, final SessionShell sessionShell, final EnvironmentFacts environmentFacts) {
-            // Slot order: core → conditional (sandbox/git) → environment → plugin sections last.
-            // Phase A4 inserts worked examples between git and environment.
+        private String systemInstructions(final PluginCatalog catalog, final SessionShell sessionShell, final ModelRegistry registry, final EnvironmentFacts environmentFacts) {
+            // Slot order: core → conditional (sandbox/git) → worked examples → environment → plugins.
             return new PromptAssembler()
                     .add(instructions)
                     .add(sandboxSection(sessionShell))
                     .add(gitSection())
+                    .add(examplesSection(registry))
                     .add(environmentFacts == null ? "" : environmentFacts.render())
                     .addAll(catalog.instructionSections())
                     .assemble();
+        }
+
+        /** Worked examples in the active model's style, when granted; a style with no bundled resource falls back to the general workflow examples. */
+        private String examplesSection(final ModelRegistry registry) {
+            if (!workedExamples) {
+                return "";
+            }
+            final String styled = "examples-" + registry.active().declaration().promptStyle().resourceSuffix() + ".md";
+            return PromptResources.load(PromptResources.exists(styled) ? styled : "examples-general.md");
         }
 
         /** The environment facts to render, under the gather grant or explicit override; null when neither is set. */

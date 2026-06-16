@@ -1,6 +1,7 @@
 package com.dmipi.coder.core.infrastructure.settings;
 
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
+import com.dmipi.coder.core.domain.llm.PromptStyle;
 import com.dmipi.coder.core.domain.llm.Tier;
 import com.dmipi.coder.core.domain.permissions.Mode;
 import com.dmipi.coder.core.domain.permissions.PermissionDecision;
@@ -90,7 +91,8 @@ public final class SettingsLoader {
                     text(model, "protocol").orElse(""),
                     text(model, "endpoint").orElse(""),
                     parsed(text(model, "tier").orElse(""), Tier.class, file),
-                    model.path("contextWindow").asInt(0));
+                    model.path("contextWindow").asInt(0),
+                    text(model, "promptStyle").map(value -> parsed(value, PromptStyle.class, file)).orElse(PromptStyle.GENERAL));
         } catch (final IllegalArgumentException invalid) {
             throw new IllegalStateException("Invalid model declaration in " + file + ": " + invalid.getMessage());
         }

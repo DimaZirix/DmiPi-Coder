@@ -13,6 +13,11 @@ public final class PromptResources {
     private PromptResources() {
     }
 
+    /** True when a bundled prompt resource with this name exists on the classpath. */
+    public static boolean exists(final String name) {
+        return PromptResources.class.getResource(ROOT + name) != null;
+    }
+
     public static String load(final String name) {
         try (InputStream stream = PromptResources.class.getResourceAsStream(ROOT + name)) {
             if (stream == null) {
