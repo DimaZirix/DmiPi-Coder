@@ -15,6 +15,7 @@ import com.dmipi.coder.core.domain.agent.Reminders;
 import com.dmipi.coder.core.domain.event.Out;
 import com.dmipi.coder.core.domain.event.OutEvent;
 import com.dmipi.coder.core.domain.hil.Hil;
+import com.dmipi.coder.core.domain.llm.ChatMessage;
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.llm.ModelRegistry;
 import com.dmipi.coder.core.domain.permissions.HardLimits;
@@ -28,6 +29,7 @@ import com.dmipi.coder.core.domain.tool.ToolRegistry;
 import com.dmipi.coder.core.infrastructure.files.AnchoredFileSystem;
 import com.dmipi.coder.core.infrastructure.http.GuardedHttpClient;
 import com.dmipi.coder.core.infrastructure.json.JacksonToolParamsParser;
+import com.dmipi.coder.core.infrastructure.sessions.SessionFingerprint;
 import com.dmipi.coder.core.infrastructure.sessions.SessionStore;
 import com.dmipi.coder.core.infrastructure.settings.Settings;
 import com.dmipi.coder.core.infrastructure.settings.SettingsLoader;
@@ -60,9 +62,10 @@ public final class Coder implements AutoCloseable {
     private final AutoCloseable sessionShell;
     private final Conversation conversation;
     private final SessionStore sessions;
+    private final String fingerprint;
     private volatile CancelToken currentTurn;
 
-    private Coder(final AgentLoop agentLoop, final ModelRegistry models, final PermissionGate gate, final Out out, final In in, final AutoCloseable sessionShell, final Conversation conversation, final SessionStore sessions) {
+    private Coder(final AgentLoop agentLoop, final ModelRegistry models, final PermissionGate gate, final Out out, final In in, final AutoCloseable sessionShell, final Conversation conversation, final SessionStore sessions, final String fingerprint) {
         this.agentLoop = agentLoop;
         this.models = models;
         this.gate = gate;
@@ -71,6 +74,7 @@ public final class Coder implements AutoCloseable {
         this.sessionShell = sessionShell;
         this.conversation = conversation;
         this.sessions = sessions;
+        this.fingerprint = fingerprint;
     }
 
     /** Releases session resources — currently the sandbox, if one was created. */
@@ -144,20 +148,29 @@ public final class Coder implements AutoCloseable {
         return store().list();
     }
 
-    /** Persists the dialogue (never the instructions) under the given name; overwrites a previous save of that name. */
+    /** Persists the system prompt, a fingerprint of its inputs, and the dialogue under the given name; overwrites a previous save. */
     public void saveSession(final String name) {
-        store().save(name, conversation.messages());
+        final List<ChatMessage> all = conversation.messages();
+        store().save(name, all.getFirst().content(), fingerprint, all.subList(1, all.size()));
     }
 
     /**
-     * Continues a saved session: its dialogue is appended under the freshly built instructions.
-     * Only a conversation with no history yet can resume — resume first, then talk.
+     * Continues a saved session. When its fingerprint matches this session's — same tools,
+     * plugins, environment and model — the saved system prompt is replayed byte-for-byte so the
+     * server's prompt cache survives the resume; otherwise the current prompt is kept. Only a
+     * conversation with no history yet can resume — resume first, then talk.
      */
-    public void resumeSession(final String name) {
+    public ResumeResult resumeSession(final String name) {
         if (conversation.messages().size() > 1) {
             throw new IllegalStateException("This conversation already has history — resume before the first turn.");
         }
-        store().load(name).forEach(conversation::add);
+        final SessionStore.SavedSession saved = store().load(name);
+        final boolean reuse = saved.fingerprint().equals(fingerprint);
+        if (reuse) {
+            conversation.replaceSystemInstructions(saved.systemPrompt());
+        }
+        saved.messages().forEach(conversation::add);
+        return reuse ? ResumeResult.PROMPT_REUSED : ResumeResult.PROMPT_REBUILT;
     }
 
     private SessionStore store() {
@@ -400,13 +413,25 @@ public final class Coder implements AutoCloseable {
             lateBound.bind(registry, toolRegistry, gate, paramsParser, sessionShell);
             conversationsEngine.bind(registry, gate, paramsParser, subagentOut, toolsByPlugin);
 
-            final Conversation conversation = new Conversation(systemInstructions(catalog, sessionShell, registry, resolveEnvironment(registry)));
+            final EnvironmentFacts environment = resolveEnvironment(registry);
+            final Conversation conversation = new Conversation(systemInstructions(catalog, sessionShell, registry, environment));
             final ContextManager contextManager = new ContextManager(registry, compactionThreshold, out);
             final NextSpeakerCheck nextSpeaker = nextSpeakerCheck ? new NextSpeakerCheck(registry) : null;
             final LoopGuards guards = new LoopGuards(contextManager, nextSpeaker, resolveReminders(gate));
             final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn, guards);
             final SessionStore sessions = sessionsGranted ? new SessionStore(projectDirectory.resolve(".coder/sessions")) : null;
-            return new Coder(loop, registry, gate, out, in, sessionShell, conversation, sessions);
+            return new Coder(loop, registry, gate, out, in, sessionShell, conversation, sessions, fingerprint(toolRegistry, registry, environment));
+        }
+
+        /** A stable hash of the prompt/tool inputs; a resumed session with the same fingerprint can replay its saved prompt. */
+        private String fingerprint(final ToolRegistry toolRegistry, final ModelRegistry registry, final EnvironmentFacts environment) {
+            final List<String> parts = new ArrayList<>();
+            toolRegistry.schemas().forEach(schema -> parts.add(schema.name() + ":" + schema.description() + ":" + schema.parametersJson()));
+            plugins.forEach(plugin -> parts.add(plugin.getClass().getName()));
+            parts.add(environment == null ? "no-env" : environment.render());
+            parts.add(registry.active().declaration().name());
+            parts.add(registry.active().declaration().promptStyle().name());
+            return SessionFingerprint.of(parts);
         }
 
         /** The reminders component when granted, or null — the date, plan-mode notice, and periodic rules refresher, appended at the tail. */

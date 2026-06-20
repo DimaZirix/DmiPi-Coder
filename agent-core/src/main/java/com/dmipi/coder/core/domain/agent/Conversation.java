@@ -26,6 +26,11 @@ public final class Conversation {
         messages.add(Objects.requireNonNull(message, "message"));
     }
 
+    /** Replaces the system instructions at index 0 — used to replay a saved prompt verbatim on resume. */
+    public void replaceSystemInstructions(final String systemInstructions) {
+        messages.set(0, ChatMessage.system(Objects.requireNonNull(systemInstructions, "systemInstructions")));
+    }
+
     /**
      * Replaces the history before {@code keepFromIndex} with the given summary message; the
      * system instructions and the tail from that index stay as they are.

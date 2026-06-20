@@ -16,9 +16,11 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Saves and resumes conversations as JSON files under the sessions directory. The system
- * message is never stored — instructions are rebuilt fresh each session; only the dialogue
- * (prompts, answers, tool calls and results) persists.
+ * Saves and resumes conversations as JSON files under the sessions directory. Each file records
+ * the system prompt and a fingerprint of what produced it ({@link SessionFingerprint}) alongside
+ * the dialogue — so a resume can replay the prompt byte-for-byte when the world still matches,
+ * reusing the LLM's prompt cache, and rebuild it otherwise. The system prompt is stored but never
+ * re-sent from history: it becomes message 0 of the resumed conversation.
  */
 public final class SessionStore {
 
@@ -28,6 +30,10 @@ public final class SessionStore {
 
     public SessionStore(final Path directory) {
         this.directory = directory;
+    }
+
+    /** A saved session: the system prompt it ran under, the fingerprint of its inputs, and the dialogue. */
+    public record SavedSession(String systemPrompt, String fingerprint, List<ChatMessage> messages) {
     }
 
     /** The saved session names, sorted; an absent directory holds none. */
@@ -47,11 +53,14 @@ public final class SessionStore {
         }
     }
 
-    public void save(final String name, final List<ChatMessage> messages) {
-        final ArrayNode root = MAPPER.createArrayNode();
+    public void save(final String name, final String systemPrompt, final String fingerprint, final List<ChatMessage> messages) {
+        final ObjectNode root = MAPPER.createObjectNode();
+        root.put("fingerprint", fingerprint);
+        root.put("systemPrompt", systemPrompt);
+        final ArrayNode dialogue = root.putArray("messages");
         messages.stream()
                 .filter(message -> message.role() != Role.SYSTEM)
-                .forEach(message -> root.add(node(message)));
+                .forEach(message -> dialogue.add(node(message)));
         try {
             Files.createDirectories(directory);
             Files.writeString(file(name), MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(root));
@@ -60,7 +69,7 @@ public final class SessionStore {
         }
     }
 
-    public List<ChatMessage> load(final String name) {
+    public SavedSession load(final String name) {
         final Path file = file(name);
         if (!Files.isRegularFile(file)) {
             throw new IllegalArgumentException("No saved session named '" + name + "'. Saved: " + String.join(", ", list()) + ".");
@@ -68,10 +77,10 @@ public final class SessionStore {
         try {
             final JsonNode root = MAPPER.readTree(Files.readString(file));
             final List<ChatMessage> messages = new ArrayList<>();
-            for (final JsonNode node : root) {
+            for (final JsonNode node : root.path("messages")) {
                 messages.add(message(node));
             }
-            return List.copyOf(messages);
+            return new SavedSession(root.path("systemPrompt").asString(""), root.path("fingerprint").asString(""), List.copyOf(messages));
         } catch (final IOException failure) {
             throw new UncheckedIOException("Could not read the session '" + name + "': " + failure.getMessage(), failure);
         }

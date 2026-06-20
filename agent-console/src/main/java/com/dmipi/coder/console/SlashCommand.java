@@ -27,8 +27,11 @@ enum SlashCommand {
                 out.println("Usage: /resume <name>");
                 return;
             }
-            coder.resumeSession(args.trim());
-            out.println("(resumed session '" + args.trim() + "')");
+            final com.dmipi.coder.core.api.ResumeResult result = coder.resumeSession(args.trim());
+            final String cache = result == com.dmipi.coder.core.api.ResumeResult.PROMPT_REUSED
+                    ? "prompt reused, cache warm"
+                    : "environment changed, prompt rebuilt";
+            out.println("(resumed session '" + args.trim() + "' — " + cache + ")");
         }
     },
     LLM("/llm") {
