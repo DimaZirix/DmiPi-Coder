@@ -12,6 +12,8 @@ import com.dmipi.coder.core.infrastructure.files.UnifiedDiffs;
 import com.dmipi.coder.core.plugin.FileSystem;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Replaces an exact string in a file. The old string must match uniquely unless replace_all is
@@ -20,6 +22,8 @@ import java.util.Optional;
 final class EditTool implements Tool {
 
     private static final int PREVIEW_CAP = 1_500;
+    private static final int LINE_NUMBER_FIELD_WIDTH = 6;
+    private static final Pattern LINE_NUMBER_PREFIX = Pattern.compile("^ *\\d+\\t");
     private static final String SCHEMA = """
             {
               "type": "object",
@@ -124,8 +128,8 @@ final class EditTool implements Tool {
             return new ToolResult.Failure(failure.getMessage());
         }
 
-        final String oldString = adaptedToFile(content, params.string("old_string").orElseThrow());
-        final String newString = adaptedToFile(content, params.string("new_string").orElseThrow());
+        final String oldString = adaptedToFile(content, stripLineNumbers(params.string("old_string").orElseThrow()));
+        final String newString = adaptedToFile(content, stripLineNumbers(params.string("new_string").orElseThrow()));
         final int occurrences = count(content, oldString);
         if (occurrences == 0) {
             return new ToolResult.Failure("'old_string' was not found in " + pathParam + ". Read the file and copy the text exactly, including whitespace.");
@@ -143,6 +147,23 @@ final class EditTool implements Tool {
         }
         final int replaced = replaceAll ? occurrences : 1;
         return new ToolResult.Success("Replaced " + replaced + " occurrence(s) in " + pathParam + ".", new Display.Diff(UnifiedDiffs.between(pathParam, content, revised)));
+    }
+
+    /**
+     * read_file numbers lines cat-style ({@code %6d\t<line>}); a model may paste them into
+     * old_string. Strip that exact prefix — a right-justified number field at least 6 wide,
+     * then a tab — so the edit still matches. A genuine short {@code digits+tab} line (field
+     * under 6 wide) is left alone.
+     */
+    private static String stripLineNumbers(final String text) {
+        final String[] lines = text.split("\n", -1);
+        for (int i = 0; i < lines.length; i++) {
+            final Matcher prefix = LINE_NUMBER_PREFIX.matcher(lines[i]);
+            if (prefix.find() && prefix.end() - 1 >= LINE_NUMBER_FIELD_WIDTH) {
+                lines[i] = lines[i].substring(prefix.end());
+            }
+        }
+        return String.join("\n", lines);
     }
 
     /**

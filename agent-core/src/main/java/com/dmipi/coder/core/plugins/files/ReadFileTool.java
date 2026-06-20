@@ -92,8 +92,14 @@ final class ReadFileTool implements Tool {
         final int limit = (int) Math.min(MAX_LINES, Math.max(1, params.integer("limit").orElse((long) MAX_LINES)));
 
         final int end = Math.min(lines.size(), offset - 1 + limit);
-        final String window = String.join("\n", lines.subList(offset - 1, end));
-        final String note = end < lines.size() ? "\n[showing lines " + offset + "-" + end + " of " + lines.size() + "; continue with offset " + (end + 1) + "]" : "";
-        return new ToolResult.Success(window + note, new Display.Text("read " + (end - offset + 1) + " lines"));
+        final String banner = "[Showing lines " + offset + "-" + end + " of " + lines.size() + " total lines. Use 'offset' and 'limit' to read more.]\n";
+        final StringBuilder numbered = new StringBuilder(banner);
+        for (int i = offset - 1; i < end; i++) {
+            numbered.append(String.format("%6d\t%s", i + 1, lines.get(i)));
+            if (i < end - 1) {
+                numbered.append('\n');
+            }
+        }
+        return new ToolResult.Success(numbered.toString(), new Display.Text("read " + (end - offset + 1) + " lines"));
     }
 }

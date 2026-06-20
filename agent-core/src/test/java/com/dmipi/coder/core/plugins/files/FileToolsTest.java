@@ -30,12 +30,14 @@ class FileToolsTest {
         Files.writeString(project.resolve("f.txt"), "one\ntwo\nthree\nfour");
         final ReadFileTool tool = new ReadFileTool(files());
 
-        // When / Then: whole file
-        assertThat(tool.execute(params("{\"path\": \"f.txt\"}"), new CancelToken()).llmContent()).isEqualTo("one\ntwo\nthree\nfour");
+        // When / Then: whole file, numbered cat-style with a banner
+        assertThat(tool.execute(params("{\"path\": \"f.txt\"}"), new CancelToken()).llmContent())
+                .isEqualTo("[Showing lines 1-4 of 4 total lines. Use 'offset' and 'limit' to read more.]\n"
+                        + "     1\tone\n     2\ttwo\n     3\tthree\n     4\tfour");
 
-        // When / Then: a window
+        // When / Then: a window carries the banner and the right line numbers
         final ToolResult window = tool.execute(params("{\"path\": \"f.txt\", \"offset\": 2, \"limit\": 2}"), new CancelToken());
-        assertThat(window.llmContent()).startsWith("two\nthree").contains("lines 2-3 of 4").contains("offset 4");
+        assertThat(window.llmContent()).contains("Showing lines 2-3 of 4").contains("     2\ttwo").contains("     3\tthree");
     }
 
     @Test
@@ -99,6 +101,29 @@ class FileToolsTest {
         // Then
         assertThat(result).isInstanceOf(ToolResult.Success.class);
         assertThat(project.resolve("f.txt")).hasContent("hello there");
+    }
+
+    @Test
+    @DisplayName("edit tolerates cat-style line numbers pasted from read_file, and leaves short digit+tab lines alone")
+    void should_strip_pasted_line_numbers() throws IOException {
+        // Given: a multi-line file, and old_string pasted WITH read_file's numbering
+        Files.writeString(project.resolve("f.txt"), "alpha\nbeta\ngamma");
+        final EditTool tool = new EditTool(files());
+        final ToolParams numbered = params("{\"path\": \"f.txt\", \"old_string\": \"     2\\tbeta\", \"new_string\": \"     2\\tBETA\"}");
+
+        // When
+        final ToolResult result = tool.execute(numbered, new CancelToken());
+
+        // Then: the line-number prefix is stripped from both strings, so the edit lands cleanly
+        assertThat(result).isInstanceOf(ToolResult.Success.class);
+        assertThat(project.resolve("f.txt")).hasContent("alpha\nBETA\ngamma");
+
+        // And a genuine short "digits+tab" line (field under 6 wide) is NOT mis-stripped
+        Files.writeString(project.resolve("g.txt"), "42\tvalue");
+        final ToolResult tsv = new EditTool(files()).execute(
+                params("{\"path\": \"g.txt\", \"old_string\": \"42\\tvalue\", \"new_string\": \"42\\tchanged\"}"), new CancelToken());
+        assertThat(tsv).isInstanceOf(ToolResult.Success.class);
+        assertThat(project.resolve("g.txt")).hasContent("42\tchanged");
     }
 
     @Test
