@@ -78,16 +78,18 @@ final class GlobTool implements Tool {
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure(failure.getMessage());
         }
+        final String pattern = params.string("pattern").orElseThrow();
         if (matches.isEmpty()) {
-            return new ToolResult.Success("No files match '" + params.string("pattern").orElseThrow() + "'.", new Display.Text("no matches"));
+            return new ToolResult.Success("No files match \"" + pattern + "\".", new Display.Text("no matches"));
         }
 
         final List<Path> shown = matches.size() > MAX_RESULTS ? matches.subList(0, MAX_RESULTS) : matches;
+        final String header = "Found " + matches.size() + " file(s) matching \"" + pattern + "\":\n";
         final String listing = shown.stream()
                 .map(Path::toString)
                 .reduce((a, b) -> a + "\n" + b)
                 .orElse("");
-        final String note = matches.size() > MAX_RESULTS ? "\n[" + (matches.size() - MAX_RESULTS) + " more not shown]" : "";
-        return new ToolResult.Success(listing + note, new Display.Text(matches.size() + " match(es)"));
+        final String footer = matches.size() > MAX_RESULTS ? "\n[showing the first " + MAX_RESULTS + "; " + (matches.size() - MAX_RESULTS) + " more not shown — refine the pattern]" : "";
+        return new ToolResult.Success(header + listing + footer, new Display.Text(matches.size() + " match(es)"));
     }
 }

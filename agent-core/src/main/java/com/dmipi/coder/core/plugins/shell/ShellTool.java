@@ -81,45 +81,36 @@ final class ShellTool implements Tool {
 
     @Override
     public ToolResult execute(final ToolParams params, final CancelToken cancel) {
+        final String command = params.string("command").orElseThrow();
         final Optional<Duration> timeout = params.integer("timeout_seconds").map(Duration::ofSeconds);
         final ShellResult result;
         try {
-            result = shell.run(params.string("command").orElseThrow(), timeout, cancel);
+            result = shell.run(command, timeout, cancel);
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure("The command could not be run: " + failure.getMessage());
         }
-        return report(result);
+        return report(command, result);
     }
 
-    private static ToolResult report(final ShellResult result) {
-        final String body = compose(result);
+    /** Labeled fields, always present, so the model can read exit status and each stream unambiguously — partial output is kept even on timeout. */
+    private static ToolResult report(final String command, final ShellResult result) {
+        final String body = "Command: " + command
+                + "\nExit code: " + (result.timedOut() ? "killed (timeout)" : result.exitCode())
+                + "\nStdout:\n" + capped(result.stdout())
+                + "\nStderr:\n" + capped(result.stderr());
         if (result.timedOut()) {
             return new ToolResult.Failure("The command was killed for exceeding its timeout.\n" + body);
         }
         if (!result.succeeded()) {
-            return new ToolResult.Failure("Exit code " + result.exitCode() + ".\n" + body);
+            return new ToolResult.Failure(body);
         }
-        return new ToolResult.Success(body.isBlank() ? "(exit 0, no output)" : body, new Display.Text("exit 0"));
+        return new ToolResult.Success(body, new Display.Text("exit 0"));
     }
 
-    private static String compose(final ShellResult result) {
-        final StringBuilder body = new StringBuilder();
-        appendCapped(body, result.stdout());
-        if (!result.stderr().isBlank()) {
-            if (body.length() > 0) {
-                body.append('\n');
-            }
-            body.append("[stderr]\n");
-            appendCapped(body, result.stderr());
+    private static String capped(final String text) {
+        if (text.isEmpty()) {
+            return "(empty)";
         }
-        return body.toString();
-    }
-
-    private static void appendCapped(final StringBuilder body, final String text) {
-        if (text.length() > OUTPUT_CAP) {
-            body.append(text, 0, OUTPUT_CAP).append("\n[…output truncated]");
-        } else {
-            body.append(text);
-        }
+        return text.length() > OUTPUT_CAP ? text.substring(0, OUTPUT_CAP) + "\n[…output truncated]" : text;
     }
 }

@@ -100,12 +100,14 @@ final class GrepTool implements Tool {
             collectMatches(file, pattern, hits);
         }
 
+        final String patternText = params.string("pattern").orElseThrow();
         if (hits.isEmpty()) {
-            return new ToolResult.Success("No matches for '" + params.string("pattern").orElseThrow() + "'.", new Display.Text("no matches"));
+            return new ToolResult.Success("No matches for \"" + patternText + "\".", new Display.Text("no matches"));
         }
         final boolean capped = hits.size() >= MAX_MATCHES;
-        final String note = capped ? "\n[stopped at " + MAX_MATCHES + " matches; narrow the pattern or glob]" : "";
-        return new ToolResult.Success(String.join("\n", hits) + note, new Display.Text(hits.size() + (capped ? "+" : "") + " match(es)"));
+        final String header = "Found " + hits.size() + (capped ? "+" : "") + " matching line(s) for \"" + patternText + "\":\n";
+        final String footer = capped ? "\n[stopped at " + MAX_MATCHES + " matches; narrow the pattern or glob]" : "";
+        return new ToolResult.Success(header + String.join("\n", hits) + footer, new Display.Text(hits.size() + (capped ? "+" : "") + " match(es)"));
     }
 
     private void collectMatches(final Path file, final Pattern pattern, final List<String> hits) {

@@ -40,8 +40,10 @@ class SearchToolsTest {
         // When
         final ToolResult java = tool.execute(params("{\"pattern\": \"**/*.java\"}"), new CancelToken());
 
-        // Then
-        assertThat(java.llmContent()).contains("App.java").contains("Util.java").doesNotContain("README");
+        // Then: self-explaining header naming the count and pattern
+        assertThat(java.llmContent())
+                .startsWith("Found 2 file(s) matching \"**/*.java\":")
+                .contains("App.java").contains("Util.java").doesNotContain("README");
 
         // When / Then: no matches
         assertThat(tool.execute(params("{\"pattern\": \"**/*.py\"}"), new CancelToken()).llmContent()).contains("No files match");
@@ -56,8 +58,10 @@ class SearchToolsTest {
         // When
         final ToolResult result = tool.execute(params("{\"pattern\": \"class \\\\w+\"}"), new CancelToken());
 
-        // Then
-        assertThat(result.llmContent()).contains("App.java:1: class App").contains("Util.java:1: class Util");
+        // Then: a header naming the count and pattern, then the path:line: text hits
+        assertThat(result.llmContent())
+                .startsWith("Found 2 matching line(s) for")
+                .contains("App.java:1: class App").contains("Util.java:1: class Util");
     }
 
     @Test

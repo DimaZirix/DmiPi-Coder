@@ -74,8 +74,13 @@ final class ListDirectoryTool implements Tool {
             return new ToolResult.Failure(failure.getMessage());
         }
 
+        final String path = params.string("path").orElse(".");
+        if (entries.isEmpty()) {
+            return new ToolResult.Success("Directory listing for " + path + ":\n(empty)", new Display.Text("empty directory"));
+        }
         final List<String> shown = entries.size() > MAX_ENTRIES ? entries.subList(0, MAX_ENTRIES) : entries;
-        final String note = entries.size() > MAX_ENTRIES ? "\n[" + (entries.size() - MAX_ENTRIES) + " more entries not shown]" : "";
-        return new ToolResult.Success(String.join("\n", shown) + note, new Display.Text("listed " + entries.size() + " entries"));
+        final String header = "Directory listing for " + path + ":\n";
+        final String footer = entries.size() > MAX_ENTRIES ? "\n[showing the first " + MAX_ENTRIES + "; " + (entries.size() - MAX_ENTRIES) + " more not shown]" : "";
+        return new ToolResult.Success(header + String.join("\n", shown) + footer, new Display.Text("listed " + entries.size() + " entries"));
     }
 }

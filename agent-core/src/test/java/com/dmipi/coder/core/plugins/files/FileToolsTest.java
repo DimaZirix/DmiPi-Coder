@@ -60,7 +60,7 @@ class FileToolsTest {
         final ToolResult result = new ListDirectoryTool(files()).execute(params("{}"), new CancelToken());
 
         // Then
-        assertThat(result.llmContent()).isEqualTo("pom.xml\nsrc/");
+        assertThat(result.llmContent()).isEqualTo("Directory listing for .:\npom.xml\nsrc/");
     }
 
     @Test
