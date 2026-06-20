@@ -9,7 +9,9 @@ import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.agent.ContextManager;
 import com.dmipi.coder.core.domain.agent.Conversation;
 import com.dmipi.coder.core.domain.agent.In;
+import com.dmipi.coder.core.domain.agent.LoopGuards;
 import com.dmipi.coder.core.domain.agent.NextSpeakerCheck;
+import com.dmipi.coder.core.domain.agent.Reminders;
 import com.dmipi.coder.core.domain.event.Out;
 import com.dmipi.coder.core.domain.event.OutEvent;
 import com.dmipi.coder.core.domain.hil.Hil;
@@ -194,6 +196,8 @@ public final class Coder implements AutoCloseable {
         private boolean gatherEnvironment;
         private EnvironmentFacts environment;
         private boolean workedExamples;
+        private boolean remindersEnabled;
+        private int reminderInterval = 10;
 
         private Builder() {
         }
@@ -343,6 +347,21 @@ public final class Coder implements AutoCloseable {
             return this;
         }
 
+        /** Enables transient tail reminders (date, plan-mode notice, and a rules refresher every N steps); off by default. */
+        public Builder reminders() {
+            this.remindersEnabled = true;
+            return this;
+        }
+
+        /** The reminder cadence — the rules refresher fires every N steps; default 10. */
+        public Builder reminderInterval(final int reminderInterval) {
+            if (reminderInterval <= 0) {
+                throw new IllegalArgumentException("reminderInterval must be positive, got " + reminderInterval + ".");
+            }
+            this.reminderInterval = reminderInterval;
+            return this;
+        }
+
         /**
          * Enables the next-speaker check: a step ending in plain text is judged by the fast tier
          * — a stalled "I will now…" gets one nudge to continue. Off by default: it costs one
@@ -384,9 +403,23 @@ public final class Coder implements AutoCloseable {
             final Conversation conversation = new Conversation(systemInstructions(catalog, sessionShell, registry, resolveEnvironment(registry)));
             final ContextManager contextManager = new ContextManager(registry, compactionThreshold, out);
             final NextSpeakerCheck nextSpeaker = nextSpeakerCheck ? new NextSpeakerCheck(registry) : null;
-            final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn, contextManager, nextSpeaker);
+            final LoopGuards guards = new LoopGuards(contextManager, nextSpeaker, resolveReminders(gate));
+            final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn, guards);
             final SessionStore sessions = sessionsGranted ? new SessionStore(projectDirectory.resolve(".coder/sessions")) : null;
             return new Coder(loop, registry, gate, out, in, sessionShell, conversation, sessions);
+        }
+
+        /** The reminders component when granted, or null — the date, plan-mode notice, and periodic rules refresher, appended at the tail. */
+        private Reminders resolveReminders(final PermissionGate gate) {
+            if (!remindersEnabled) {
+                return null;
+            }
+            return new Reminders(
+                    reminderInterval,
+                    PromptResources.load("critical-rules-reminder.md"),
+                    PromptResources.load("plan-mode-reminder.md"),
+                    gate::mode,
+                    () -> java.time.LocalDate.now().toString());
         }
 
         /** Builds the session shell from the configured sandbox provider, or fails clearly when a shell-using plugin has none. */

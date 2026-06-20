@@ -41,25 +41,24 @@ public final class AgentLoop {
     private final ToolParamsParser paramsParser;
     private final Out out;
     private final int maxStepsPerTurn;
-    private final ContextManager contextManager;
-    private final NextSpeakerCheck nextSpeaker;
+    private final LoopGuards guards;
 
     /** The main loop follows the registry's active model, so a runtime switch applies mid-conversation. */
     public AgentLoop(final Conversation conversation, final ModelRegistry models, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn) {
-        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn, null, null);
+        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn, LoopGuards.none());
     }
 
-    /** A nested (subagent) loop runs on one fixed client for its whole life; its context is throwaway — no compaction. */
+    /** A nested (subagent) loop runs on one fixed client for its whole life; its context is throwaway — no guards. */
     public AgentLoop(final Conversation conversation, final Supplier<LlmClient> client, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn) {
-        this(conversation, client, tools, gate, paramsParser, out, maxStepsPerTurn, null, null);
+        this(conversation, client, tools, gate, paramsParser, out, maxStepsPerTurn, LoopGuards.none());
     }
 
-    /** The fully wired main loop: context kept inside the window, stalled steps nudged through the next-speaker check. */
-    public AgentLoop(final Conversation conversation, final ModelRegistry models, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn, final ContextManager contextManager, final NextSpeakerCheck nextSpeaker) {
-        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn, contextManager, nextSpeaker);
+    /** The fully wired main loop: compaction, the next-speaker nudge, and transient reminders. */
+    public AgentLoop(final Conversation conversation, final ModelRegistry models, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn, final LoopGuards guards) {
+        this(conversation, () -> models.active().client(), tools, gate, paramsParser, out, maxStepsPerTurn, guards);
     }
 
-    private AgentLoop(final Conversation conversation, final Supplier<LlmClient> client, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn, final ContextManager contextManager, final NextSpeakerCheck nextSpeaker) {
+    private AgentLoop(final Conversation conversation, final Supplier<LlmClient> client, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn, final LoopGuards guards) {
         this.conversation = conversation;
         this.client = client;
         this.tools = tools;
@@ -67,8 +66,7 @@ public final class AgentLoop {
         this.paramsParser = paramsParser;
         this.out = out;
         this.maxStepsPerTurn = maxStepsPerTurn;
-        this.contextManager = contextManager;
-        this.nextSpeaker = nextSpeaker;
+        this.guards = guards;
     }
 
     /** Runs one full turn for the user input; the conversation stays usable whatever the ending. */
@@ -94,15 +92,15 @@ public final class AgentLoop {
             if (cancel.isCancelled()) {
                 return;
             }
-            if (contextManager != null) {
-                contextManager.maybeCompact(conversation, cancel);
+            if (guards.contextManager() != null) {
+                guards.contextManager().maybeCompact(conversation, cancel);
             }
 
-            final Step result = streamStep(cancel);
+            final Step result = streamStep(cancel, step);
             conversation.add(ChatMessage.assistant(result.text(), result.toolCalls()));
             if (result.toolCalls().isEmpty()) {
                 // One nudge per turn: a model that stalls again after being told to continue gets the turn back to the user.
-                if (nudged || nextSpeaker == null || cancel.isCancelled() || !nextSpeaker.modelShouldContinue(result.text(), cancel)) {
+                if (nudged || guards.nextSpeaker() == null || cancel.isCancelled() || !guards.nextSpeaker().modelShouldContinue(result.text(), cancel)) {
                     return;
                 }
                 nudged = true;
@@ -121,11 +119,14 @@ public final class AgentLoop {
         out.event(new OutEvent.AnswerDelta(STEP_LIMIT_NOTE.formatted(maxStepsPerTurn)));
     }
 
-    private Step streamStep(final CancelToken cancel) {
+    private Step streamStep(final CancelToken cancel, final int step) {
         final StringBuilder text = new StringBuilder();
         // Keyed and iterated by wire index: fragments may arrive out of order, execution may not.
         final Map<Integer, PendingCall> pending = new TreeMap<>();
-        client.get().stream(new ChatRequest(conversation.messages(), tools.schemas()), cancel, event -> {
+        final List<ChatMessage> requestMessages = guards.reminders() == null
+                ? conversation.messages()
+                : guards.reminders().applyTo(conversation.messages(), step);
+        client.get().stream(new ChatRequest(requestMessages, tools.schemas()), cancel, event -> {
             switch (event) {
                 case LlmStreamEvent.TextDelta(final String delta) -> {
                     text.append(delta);

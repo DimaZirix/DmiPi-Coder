@@ -48,6 +48,7 @@ public final class ConsoleMain {
                     .projectDirectory(project)
                     .gatherEnvironment()
                     .workedExamples()
+                    .reminders()
                     .model(DEFAULT_MODEL)
                     .loadUserSettings()
                     .loadProjectSettings()
