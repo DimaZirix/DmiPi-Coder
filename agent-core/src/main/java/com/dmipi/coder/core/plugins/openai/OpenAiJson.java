@@ -13,7 +13,15 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
-/** The chat-completions wire format: request serialization and stream-chunk decoding. */
+/**
+ * The chat-completions wire format: request serialization and stream-chunk decoding.
+ *
+ * <p><b>Deterministic serialization contract:</b> {@link #writeRequest} is a pure function of
+ * its inputs — fields are written in a fixed order, arrays follow message/tool order, and each
+ * tool's parameter schema round-trips through the mapper (insertion-ordered). The same
+ * {@link ChatRequest} therefore serializes to identical bytes every time, which is what lets a
+ * resumed session reproduce a cached prompt prefix byte for byte.
+ */
 final class OpenAiJson {
 
     private OpenAiJson() {
