@@ -48,7 +48,7 @@ final class TodoWriteTool implements Tool {
 
     @Override
     public String description() {
-        return "Replaces the task list shown to the user. Send the complete list on every call: planned tasks as pending, the one being worked on as in_progress, finished ones as completed.";
+        return "Replaces the task list shown to the user. Use it for any task that takes more than a couple of steps: write the planned steps up front, keep exactly one task in_progress while you work it, and mark it completed the moment it is done (do not batch completions). Send the COMPLETE list on every call — it replaces the previous list entirely. Skip it for single-step work.";
     }
 
     @Override

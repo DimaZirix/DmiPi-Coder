@@ -51,7 +51,7 @@ final class EditTool implements Tool {
 
     @Override
     public String description() {
-        return "Replaces an exact string in a project file. 'old_string' must match the file content exactly (including whitespace) and uniquely, unless 'replace_all' is set.";
+        return "Replaces an exact string in a project file. Read the file first and copy 'old_string' from it verbatim, including whitespace and indentation, with at least 3 lines of context before and after the change so the match is unique — an ambiguous or not-found match fails the edit rather than guessing. Do NOT add escape characters that are not in the file. Line-number prefixes from read_file are ignored. Set 'replace_all' to change every occurrence.";
     }
 
     @Override

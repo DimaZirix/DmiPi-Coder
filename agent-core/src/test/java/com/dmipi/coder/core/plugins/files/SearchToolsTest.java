@@ -65,6 +65,32 @@ class SearchToolsTest {
     }
 
     @Test
+    @DisplayName("grep is case-insensitive by default and case-sensitive on request")
+    void should_honor_case_sensitivity() {
+        // Given
+        final GrepTool tool = new GrepTool(new AnchoredFileSystem(project));
+
+        // When / Then: default is insensitive
+        assertThat(tool.execute(params("{\"pattern\": \"CLASS app\"}"), new CancelToken()).llmContent()).contains("App.java:1");
+        // And case_sensitive:true respects case
+        assertThat(tool.execute(params("{\"pattern\": \"CLASS app\", \"case_sensitive\": true}"), new CancelToken()).llmContent())
+                .isEqualTo("No matches for \"CLASS app\".");
+    }
+
+    @Test
+    @DisplayName("grep caps at the requested limit and says so")
+    void should_respect_the_limit() {
+        // Given a pattern that matches many lines
+        final GrepTool tool = new GrepTool(new AnchoredFileSystem(project));
+
+        // When
+        final ToolResult limited = tool.execute(params("{\"pattern\": \"class \\\\w+\", \"limit\": 1}"), new CancelToken());
+
+        // Then
+        assertThat(limited.llmContent()).contains("Found 1+ matching").contains("stopped at 1 matches");
+    }
+
+    @Test
     @DisplayName("grep narrows by glob and finds nothing outside it")
     void should_grep_within_a_glob() {
         // Given

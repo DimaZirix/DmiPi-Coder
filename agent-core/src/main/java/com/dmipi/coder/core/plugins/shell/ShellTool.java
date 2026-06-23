@@ -43,7 +43,7 @@ final class ShellTool implements Tool {
 
     @Override
     public String description() {
-        return "Runs a shell command in the project directory and returns its exit code and output. Output is capped; a command exceeding its timeout is killed.";
+        return "Runs a shell command in the project directory and returns its exit code and output. Do NOT use it for tasks a dedicated tool covers: read files with read_file (not cat/head/tail/sed), edit with edit (not sed/awk), create files with write_file, find files with glob (not find/ls), and search contents with grep_search (not grep/rg). Do not chain unrelated commands with && or ;. Explain any command that modifies the system before running it. Output is capped; a command exceeding its timeout is killed and its partial output returned.";
     }
 
     @Override
