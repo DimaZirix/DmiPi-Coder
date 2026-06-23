@@ -46,7 +46,8 @@ final class OpenAiClient implements LlmClient {
     @Override
     public void stream(final ChatRequest request, final CancelToken cancel, final Consumer<LlmStreamEvent> events) {
         final HttpResponse<InputStream> response = send(OpenAiJson.writeRequest(mapper, declaration.name(), request));
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+        final InputStream guarded = new IdleStreamGuard(response.body(), Duration.ofSeconds(declaration.options().idleTimeoutSeconds()));
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(guarded, StandardCharsets.UTF_8))) {
             readStream(reader, cancel, events);
         } catch (final IOException failure) {
             throw new LlmException("The stream from " + completionsUri + " failed: " + failure.getMessage(), failure);

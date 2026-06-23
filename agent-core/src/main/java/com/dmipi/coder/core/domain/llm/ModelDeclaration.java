@@ -2,13 +2,13 @@ package com.dmipi.coder.core.domain.llm;
 
 import java.util.Objects;
 
-/** One configured model: its name, the protocol it is reached by, the endpoint, its tier, its context window, and the tool-call style it speaks. */
-public record ModelDeclaration(String name, String protocol, String endpoint, Tier tier, int contextWindow, PromptStyle promptStyle) {
+/** One configured model: name, protocol, endpoint, tier, context window, and optional wire {@link ModelOptions}. */
+public record ModelDeclaration(String name, String protocol, String endpoint, Tier tier, int contextWindow, ModelOptions options) {
 
     public ModelDeclaration {
         Objects.requireNonNull(endpoint, "endpoint");
         Objects.requireNonNull(tier, "tier");
-        Objects.requireNonNull(promptStyle, "promptStyle");
+        Objects.requireNonNull(options, "options");
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("A model declaration requires a non-blank name.");
         }
@@ -20,8 +20,17 @@ public record ModelDeclaration(String name, String protocol, String endpoint, Ti
         }
     }
 
-    /** A declaration with the default {@link PromptStyle#GENERAL} style. */
+    /** A declaration with default {@link ModelOptions}. */
     public ModelDeclaration(final String name, final String protocol, final String endpoint, final Tier tier, final int contextWindow) {
-        this(name, protocol, endpoint, tier, contextWindow, PromptStyle.GENERAL);
+        this(name, protocol, endpoint, tier, contextWindow, ModelOptions.defaults());
+    }
+
+    /** A declaration with a chosen prompt style, otherwise default options. */
+    public ModelDeclaration(final String name, final String protocol, final String endpoint, final Tier tier, final int contextWindow, final PromptStyle promptStyle) {
+        this(name, protocol, endpoint, tier, contextWindow, ModelOptions.defaults().withPromptStyle(promptStyle));
+    }
+
+    public PromptStyle promptStyle() {
+        return options.promptStyle();
     }
 }
