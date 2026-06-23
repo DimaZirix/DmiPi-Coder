@@ -91,11 +91,14 @@ final class WriteFileTool implements Tool {
     @Override
     public ToolResult execute(final ToolParams params, final CancelToken cancel) {
         try {
-            final Path path = files.resolve(params.string("path").orElseThrow());
+            final String pathParam = params.string("path").orElseThrow();
+            final Path path = files.resolve(pathParam);
             final String content = params.string("content").orElseThrow();
-            final String before = files.exists(path) ? files.read(path) : "";
+            final boolean existed = files.exists(path);
+            final String before = existed ? files.read(path) : "";
             files.write(path, content);
-            return new ToolResult.Success("Wrote " + content.length() + " characters to " + params.string("path").orElseThrow() + ".", new Display.Diff(UnifiedDiffs.between(params.string("path").orElseThrow(), before, content)));
+            final String verb = existed ? "Overwrote" : "Created and wrote to new file";
+            return new ToolResult.Success(verb + " " + pathParam + " (" + content.length() + " characters).", new Display.Diff(UnifiedDiffs.between(pathParam, before, content)));
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure(failure.getMessage());
         }

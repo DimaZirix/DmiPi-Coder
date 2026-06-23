@@ -42,25 +42,27 @@ final class SkillLibrary {
                 continue;
             }
             final String directory = entry.substring(0, entry.length() - 1);
-            final Path skillFile = files.resolve(SKILLS_LOCATION + "/" + directory + "/" + SKILL_FILE);
+            final String location = SKILLS_LOCATION + "/" + directory;
+            final Path skillFile = files.resolve(location + "/" + SKILL_FILE);
             if (files.exists(skillFile)) {
-                final Skill skill = parse(directory, files.read(skillFile));
+                final Skill skill = parse(directory, files.read(skillFile), location);
                 byName.put(skill.name(), skill);
             }
         }
     }
 
-    private static Skill parse(final String directory, final String content) {
+    private static Skill parse(final String directory, final String content, final String location) {
         final Matcher frontmatter = FRONTMATTER.matcher(content);
         if (!frontmatter.find()) {
-            return new Skill(directory, firstLine(content), content.strip());
+            return new Skill(directory, firstLine(content), content.strip(), location);
         }
         final String header = frontmatter.group(1);
         final String body = content.substring(frontmatter.end()).strip();
         return new Skill(
                 field(header, "name").orElse(directory),
                 field(header, "description").orElseGet(() -> firstLine(body)),
-                body);
+                body,
+                location);
     }
 
     private static Optional<String> field(final String header, final String key) {

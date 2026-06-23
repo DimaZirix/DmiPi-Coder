@@ -48,7 +48,7 @@ final class TaskTool implements Tool {
 
     @Override
     public String description() {
-        return "Delegates a subtask to a subagent — a fresh conversation that works on its own and returns only a summary. Use it to keep bulk exploration out of this context. The subagent starts blank: state the task completely. Available types:\n" + listing();
+        return "Delegates a subtask to a subagent — a fresh conversation that works on its own and returns only a summary, keeping its intermediate reads out of this context. Use it for open-ended work whose steps would flood the main context (e.g. \"find where retries are configured\"); for a quick, direct lookup you already know how to do, use read_file/grep_search yourself instead. The subagent starts blank, so state the task completely. Available types:\n" + listing();
     }
 
     @Override

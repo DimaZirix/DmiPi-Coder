@@ -81,7 +81,8 @@ final class SkillTool implements Tool {
         if (skill == null) {
             return new ToolResult.Failure("No skill named '" + name + "'. Available: " + String.join(", ", skills.keySet()) + ".");
         }
-        return new ToolResult.Success(skill.instructions(), new Display.Text("skill " + name));
+        final String body = skill.instructions() + "\n\n(This skill's files are under: " + skill.directory() + ")";
+        return new ToolResult.Success(body, new Display.Text("skill " + name));
     }
 
     private String listing() {

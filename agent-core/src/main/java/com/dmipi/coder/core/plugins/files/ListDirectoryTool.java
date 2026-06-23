@@ -9,6 +9,7 @@ import com.dmipi.coder.core.domain.tool.ToolKind;
 import com.dmipi.coder.core.domain.tool.ToolParams;
 import com.dmipi.coder.core.domain.tool.ToolResult;
 import com.dmipi.coder.core.plugin.FileSystem;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -78,9 +79,13 @@ final class ListDirectoryTool implements Tool {
         if (entries.isEmpty()) {
             return new ToolResult.Success("Directory listing for " + path + ":\n(empty)", new Display.Text("empty directory"));
         }
-        final List<String> shown = entries.size() > MAX_ENTRIES ? entries.subList(0, MAX_ENTRIES) : entries;
+        // Directories first (marked [DIR]), then files, each already sorted by the file system.
+        final List<String> ordered = new ArrayList<>();
+        entries.stream().filter(entry -> entry.endsWith("/")).forEach(entry -> ordered.add("[DIR] " + entry.substring(0, entry.length() - 1)));
+        entries.stream().filter(entry -> !entry.endsWith("/")).forEach(ordered::add);
+        final List<String> shown = ordered.size() > MAX_ENTRIES ? ordered.subList(0, MAX_ENTRIES) : ordered;
         final String header = "Directory listing for " + path + ":\n";
-        final String footer = entries.size() > MAX_ENTRIES ? "\n[showing the first " + MAX_ENTRIES + "; " + (entries.size() - MAX_ENTRIES) + " more not shown]" : "";
+        final String footer = ordered.size() > MAX_ENTRIES ? "\n[showing the first " + MAX_ENTRIES + "; " + (ordered.size() - MAX_ENTRIES) + " more not shown]" : "";
         return new ToolResult.Success(header + String.join("\n", shown) + footer, new Display.Text("listed " + entries.size() + " entries"));
     }
 }

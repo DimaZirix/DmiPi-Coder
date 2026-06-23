@@ -81,6 +81,7 @@ final class McpProxyTool implements Tool {
         if (result.error()) {
             return new ToolResult.Failure(result.text().isBlank() ? "The MCP server reported an error." : result.text());
         }
-        return new ToolResult.Success(result.text(), new Display.Text(callSummary(params)));
+        final String text = result.text().isBlank() ? "(the MCP tool returned no text content)" : result.text();
+        return new ToolResult.Success(text, new Display.Text(callSummary(params)));
     }
 }
