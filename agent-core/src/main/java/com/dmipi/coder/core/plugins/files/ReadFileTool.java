@@ -29,9 +29,15 @@ final class ReadFileTool implements Tool {
             }""";
 
     private final FileSystem files;
+    private final ReadTracker readTracker;
 
     ReadFileTool(final FileSystem files) {
+        this(files, null);
+    }
+
+    ReadFileTool(final FileSystem files, final ReadTracker readTracker) {
         this.files = files;
+        this.readTracker = readTracker;
     }
 
     @Override
@@ -81,6 +87,9 @@ final class ReadFileTool implements Tool {
             content = files.read(path);
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure(failure.getMessage());
+        }
+        if (readTracker != null) {
+            readTracker.markRead(path);
         }
 
         final List<String> lines = content.lines().toList();

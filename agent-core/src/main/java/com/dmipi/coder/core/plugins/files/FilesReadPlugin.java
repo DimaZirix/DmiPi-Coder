@@ -12,6 +12,17 @@ import java.util.Set;
  */
 public final class FilesReadPlugin implements Plugin {
 
+    private final ReadTracker readTracker;
+
+    public FilesReadPlugin() {
+        this(null);
+    }
+
+    /** Shares a read-tracker with {@link FilesEditPlugin} to enable the read-before-edit gate. */
+    public FilesReadPlugin(final ReadTracker readTracker) {
+        this.readTracker = readTracker;
+    }
+
     @Override
     public Set<CapabilityType> requires() {
         return Set.of(CapabilityType.FILE_SYSTEM);
@@ -19,7 +30,7 @@ public final class FilesReadPlugin implements Plugin {
 
     @Override
     public void install(final PluginRegistrar registrar, final Capabilities capabilities) {
-        registrar.registerTool(new ReadFileTool(capabilities.fileSystem()));
+        registrar.registerTool(new ReadFileTool(capabilities.fileSystem(), readTracker));
         registrar.registerTool(new ListDirectoryTool(capabilities.fileSystem()));
         registrar.registerTool(new GlobTool(capabilities.fileSystem()));
         registrar.registerTool(new GrepTool(capabilities.fileSystem()));

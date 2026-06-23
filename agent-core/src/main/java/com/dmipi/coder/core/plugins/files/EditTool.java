@@ -39,9 +39,15 @@ final class EditTool implements Tool {
             }""";
 
     private final FileSystem files;
+    private final ReadTracker readTracker;
 
     EditTool(final FileSystem files) {
+        this(files, null);
+    }
+
+    EditTool(final FileSystem files, final ReadTracker readTracker) {
         this.files = files;
+        this.readTracker = readTracker;
     }
 
     @Override
@@ -122,9 +128,16 @@ final class EditTool implements Tool {
         final String pathParam = params.string("path").orElseThrow();
 
         final Path path;
-        final String content;
         try {
             path = files.resolve(pathParam);
+        } catch (final RuntimeException failure) {
+            return new ToolResult.Failure(failure.getMessage());
+        }
+        if (readTracker != null && files.exists(path) && !readTracker.wasRead(path)) {
+            return new ToolResult.Failure("Read " + pathParam + " with read_file before editing it, so your edit matches the current content.");
+        }
+        final String content;
+        try {
             content = files.read(path);
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure(failure.getMessage());
@@ -146,6 +159,9 @@ final class EditTool implements Tool {
             files.write(path, revised);
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure(failure.getMessage());
+        }
+        if (readTracker != null) {
+            readTracker.markRead(path);
         }
         return new ToolResult.Success(editedSnippet(pathParam, content, revised, oldString, newString), new Display.Diff(UnifiedDiffs.between(pathParam, content, revised)));
     }

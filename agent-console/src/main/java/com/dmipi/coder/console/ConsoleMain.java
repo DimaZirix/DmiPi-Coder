@@ -6,6 +6,7 @@ import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.llm.Tier;
 import com.dmipi.coder.core.plugins.files.FilesEditPlugin;
 import com.dmipi.coder.core.plugins.files.FilesReadPlugin;
+import com.dmipi.coder.core.plugins.files.ReadTracker;
 import com.dmipi.coder.core.plugins.memory.MemoryPlugin;
 import com.dmipi.coder.core.plugins.openai.OpenAiProviderPlugin;
 import com.dmipi.coder.core.plugins.planning.PlanningPlugin;
@@ -37,6 +38,7 @@ public final class ConsoleMain {
         final BufferedReader input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         final PrintWriter output = new PrintWriter(System.out, true, StandardCharsets.UTF_8);
         final ConsoleRenderer renderer = new ConsoleRenderer(output);
+        final ReadTracker readTracker = new ReadTracker();
 
         final Coder coder;
         try {
@@ -55,8 +57,8 @@ public final class ConsoleMain {
                     .enableSessions()
                     .nextSpeakerCheck()
                     .registerPlugin(new OpenAiProviderPlugin())
-                    .registerPlugin(new FilesReadPlugin())
-                    .registerPlugin(new FilesEditPlugin())
+                    .registerPlugin(new FilesReadPlugin(readTracker))
+                    .registerPlugin(new FilesEditPlugin(readTracker))
                     .registerPlugin(new PlanningPlugin())
                     .registerPlugin(new MemoryPlugin())
                     .registerPlugin(new DirectSandboxPlugin())
