@@ -94,7 +94,27 @@ final class TodoWriteTool implements Tool {
     @Override
     public ToolResult execute(final ToolParams params, final CancelToken cancel) {
         final List<Display.Todo.Item> items = parse(params);
-        return new ToolResult.Success("The task list now shows " + tally(items) + ".", new Display.Todo(items));
+        return new ToolResult.Success(checklist(items), new Display.Todo(items));
+    }
+
+    /** Echoes the whole list back so the model re-reads its current plan on every call, not just a count. */
+    private static String checklist(final List<Display.Todo.Item> items) {
+        if (items.isEmpty()) {
+            return "The task list is now empty.";
+        }
+        final StringBuilder out = new StringBuilder("Task list updated (" + tally(items) + "):\n");
+        for (final Display.Todo.Item item : items) {
+            out.append(mark(item.status())).append(' ').append(item.text()).append('\n');
+        }
+        return out.toString().stripTrailing();
+    }
+
+    private static String mark(final Display.Todo.Status status) {
+        return switch (status) {
+            case COMPLETED -> "- [x]";
+            case IN_PROGRESS -> "- [~]";
+            case PENDING -> "- [ ]";
+        };
     }
 
     private static List<Display.Todo.Item> parse(final ToolParams params) {

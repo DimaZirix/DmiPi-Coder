@@ -125,9 +125,13 @@ class PlanningPluginTest {
         // When
         final ToolResult result = tool.execute(params, new CancelToken());
 
-        // Then
+        // Then: the result echoes the full checklist with per-task marks
         assertThat(tool.defaultPermission(params)).isEqualTo(PermissionDecision.ALLOW);
-        assertThat(result.llmContent()).isEqualTo("The task list now shows 3 tasks (1 completed, 1 in progress, 1 pending).");
+        assertThat(result.llmContent())
+                .startsWith("Task list updated (3 tasks (1 completed, 1 in progress, 1 pending)):")
+                .contains("- [x] a")
+                .contains("- [~] b")
+                .contains("- [ ] c");
         assertThat(tool.callSummary(params)).isEqualTo("3 tasks (1 completed, 1 in progress, 1 pending)");
     }
 

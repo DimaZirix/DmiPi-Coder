@@ -11,6 +11,7 @@ import com.dmipi.coder.core.domain.tool.ToolResult;
 import com.dmipi.coder.core.infrastructure.files.UnifiedDiffs;
 import com.dmipi.coder.core.plugin.FileSystem;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -22,6 +23,7 @@ import java.util.regex.Pattern;
 final class EditTool implements Tool {
 
     private static final int PREVIEW_CAP = 1_500;
+    private static final int CONTEXT_LINES = 3;
     private static final int LINE_NUMBER_FIELD_WIDTH = 6;
     private static final Pattern LINE_NUMBER_PREFIX = Pattern.compile("^ *\\d+\\t");
     private static final String SCHEMA = """
@@ -145,8 +147,29 @@ final class EditTool implements Tool {
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure(failure.getMessage());
         }
-        final int replaced = replaceAll ? occurrences : 1;
-        return new ToolResult.Success("Replaced " + replaced + " occurrence(s) in " + pathParam + ".", new Display.Diff(UnifiedDiffs.between(pathParam, content, revised)));
+        return new ToolResult.Success(editedSnippet(pathParam, content, revised, oldString, newString), new Display.Diff(UnifiedDiffs.between(pathParam, content, revised)));
+    }
+
+    /** Echoes the edited region, numbered, so the model can confirm the change landed without a second read. */
+    private static String editedSnippet(final String path, final String content, final String revised, final String oldString, final String newString) {
+        final int at = content.indexOf(oldString);
+        final int startLine = newlines(content.substring(0, at)) + 1;
+        final int endLine = startLine + newlines(newString);
+        final List<String> lines = revised.lines().toList();
+        final int from = Math.max(1, startLine - CONTEXT_LINES);
+        final int to = Math.min(lines.size(), endLine + CONTEXT_LINES);
+        final StringBuilder snippet = new StringBuilder("The file " + path + " has been updated. Showing lines " + from + "-" + to + " of " + lines.size() + " from the edited file:\n");
+        for (int i = from; i <= to; i++) {
+            snippet.append(String.format("%6d\t%s", i, lines.get(i - 1)));
+            if (i < to) {
+                snippet.append('\n');
+            }
+        }
+        return snippet.toString();
+    }
+
+    private static int newlines(final String text) {
+        return (int) text.chars().filter(c -> c == '\n').count();
     }
 
     /**

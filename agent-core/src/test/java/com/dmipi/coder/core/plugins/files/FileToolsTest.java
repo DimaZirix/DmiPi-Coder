@@ -98,8 +98,9 @@ class FileToolsTest {
         // When
         final ToolResult result = tool.execute(params, new CancelToken());
 
-        // Then
+        // Then: the result echoes the edited region so the model can self-verify
         assertThat(result).isInstanceOf(ToolResult.Success.class);
+        assertThat(result.llmContent()).contains("has been updated").contains("     1\thello there");
         assertThat(project.resolve("f.txt")).hasContent("hello there");
     }
 
@@ -150,7 +151,7 @@ class FileToolsTest {
         final ToolResult result = new EditTool(files()).execute(params("{\"path\": \"f.txt\", \"old_string\": \"a\", \"new_string\": \"c\", \"replace_all\": true}"), new CancelToken());
 
         // Then
-        assertThat(result.llmContent()).contains("2 occurrence");
+        assertThat(result).isInstanceOf(ToolResult.Success.class);
         assertThat(project.resolve("f.txt")).hasContent("c b c");
     }
 
