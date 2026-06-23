@@ -12,6 +12,7 @@ import com.dmipi.coder.core.domain.llm.LlmClient;
 import com.dmipi.coder.core.domain.llm.LlmException;
 import com.dmipi.coder.core.domain.llm.LlmStreamEvent;
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
+import com.dmipi.coder.core.domain.llm.ModelOptions;
 import com.dmipi.coder.core.domain.llm.Tier;
 import com.dmipi.coder.core.domain.llm.ToolCall;
 import com.dmipi.coder.core.domain.llm.ToolSchema;
@@ -36,6 +37,7 @@ class OpenAiClientTest {
 
     private final JsonMapper mapper = JsonMapper.builder().build();
     private final List<String> receivedBodies = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> receivedAuth = Collections.synchronizedList(new ArrayList<>());
     private HttpServer server;
     private volatile List<String> sseLines = List.of();
     private volatile int status = 200;
@@ -44,6 +46,7 @@ class OpenAiClientTest {
     void startServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/v1/chat/completions", exchange -> {
+            receivedAuth.add(exchange.getRequestHeaders().getFirst("Authorization"));
             receivedBodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             final byte[] body = String.join("\n", sseLines).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
@@ -200,6 +203,34 @@ class OpenAiClientTest {
 
         // Then
         assertThat(out.answerText()).isEqualTo("Hello from the model");
+    }
+
+    @Test
+    @DisplayName("with apiKeyEnv set, the request carries an Authorization: Bearer header from that env var")
+    void should_send_the_api_key_from_the_env_var() {
+        // Given: PATH is always set; use it as the key source
+        sseLines = List.of(data("{\"choices\": [{\"delta\": {}, \"finish_reason\": \"stop\"}]}"), data("[DONE]"));
+        final ModelDeclaration keyed = new ModelDeclaration("qwen", "openai", declaration().endpoint(), Tier.FAST, 8_000,
+                ModelOptions.defaults().withApiKeyEnv("PATH"));
+
+        // When
+        new OpenAiClient(keyed).stream(new ChatRequest(List.of(ChatMessage.user("hi")), List.of()), new CancelToken(), event -> {
+        });
+
+        // Then
+        assertThat(receivedAuth).singleElement().isEqualTo("Bearer " + System.getenv("PATH"));
+        // And without apiKeyEnv, no header
+        stream(new ChatRequest(List.of(ChatMessage.user("hi")), List.of()));
+        assertThat(receivedAuth).element(1).isNull();
+    }
+
+    @Test
+    @DisplayName("apiKeyEnv naming a missing env var fails loudly at construction, not silently unauthenticated")
+    void should_fail_when_the_api_key_env_var_is_missing() {
+        final ModelDeclaration keyed = new ModelDeclaration("qwen", "openai", declaration().endpoint(), Tier.FAST, 8_000,
+                ModelOptions.defaults().withApiKeyEnv("DEFINITELY_NOT_A_REAL_ENV_VAR_XYZ"));
+        assertThatExceptionOfType(IllegalStateException.class).isThrownBy(() -> new OpenAiClient(keyed))
+                .withMessageContaining("apiKeyEnv");
     }
 
     private List<LlmStreamEvent> stream(final ChatRequest request) {

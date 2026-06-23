@@ -16,6 +16,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.function.Consumer;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
@@ -36,11 +37,22 @@ final class OpenAiClient implements LlmClient {
     private final JsonMapper mapper = JsonMapper.builder().build();
     private final ModelDeclaration declaration;
     private final URI completionsUri;
+    private final Optional<String> authHeader;
 
     OpenAiClient(final ModelDeclaration declaration) {
         this.declaration = declaration;
         final String base = declaration.endpoint().endsWith("/") ? declaration.endpoint().substring(0, declaration.endpoint().length() - 1) : declaration.endpoint();
         this.completionsUri = URI.create(base + "/chat/completions");
+        this.authHeader = declaration.options().apiKeyEnv().map(env -> bearer(env, declaration.name()));
+    }
+
+    /** Resolves the API key from its environment variable at connect time — a set-but-missing var fails loudly rather than sending an unauthenticated request. */
+    private static String bearer(final String env, final String modelName) {
+        final String key = System.getenv(env);
+        if (key == null || key.isBlank()) {
+            throw new IllegalStateException("Model '" + modelName + "' declares apiKeyEnv '" + env + "', but that environment variable is not set.");
+        }
+        return "Bearer " + key;
     }
 
     @Override
@@ -55,11 +67,12 @@ final class OpenAiClient implements LlmClient {
     }
 
     private HttpResponse<InputStream> send(final String body) {
-        final HttpRequest http = HttpRequest.newBuilder(completionsUri)
+        final HttpRequest.Builder builder = HttpRequest.newBuilder(completionsUri)
                 .header("Content-Type", "application/json")
                 .header("Accept", "text/event-stream")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
+                .POST(HttpRequest.BodyPublishers.ofString(body));
+        authHeader.ifPresent(value -> builder.header("Authorization", value));
+        final HttpRequest http = builder.build();
         final HttpResponse<InputStream> response;
         try {
             response = httpClient.send(http, HttpResponse.BodyHandlers.ofInputStream());

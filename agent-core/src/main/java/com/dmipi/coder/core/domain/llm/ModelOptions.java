@@ -29,4 +29,12 @@ public record ModelOptions(PromptStyle promptStyle, int idleTimeoutSeconds, Opti
     public ModelOptions withPromptStyle(final PromptStyle style) {
         return new ModelOptions(style, idleTimeoutSeconds, apiKeyEnv, thinking, structuredOutput);
     }
+
+    public ModelOptions withApiKeyEnv(final String env) {
+        return new ModelOptions(promptStyle, idleTimeoutSeconds, Optional.of(env), thinking, structuredOutput);
+    }
+
+    public ModelOptions withThinking(final boolean value) {
+        return new ModelOptions(promptStyle, idleTimeoutSeconds, apiKeyEnv, value, structuredOutput);
+    }
 }
