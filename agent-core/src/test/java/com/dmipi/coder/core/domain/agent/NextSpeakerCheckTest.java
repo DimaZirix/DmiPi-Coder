@@ -62,6 +62,25 @@ class NextSpeakerCheckTest {
     }
 
     @Test
+    @DisplayName("the check is a schema-constrained, thinking-off control call, and reads the schema-shaped reply")
+    void should_use_a_structured_control_call() {
+        // Given: the checker replies in the schema shape
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.textStep("I will now check the file."),
+                ScriptedClient.textStep("{\"next\": \"model\"}"),
+                ScriptedClient.textStep(" done")));
+
+        // When
+        runTurn(client, true);
+
+        // Then: the model was nudged (the schema reply parsed as "model")
+        assertThat(out.answerText()).contains("done");
+        // And the control request suppressed thinking and carried the response schema
+        assertThat(client.requests().get(1).thinkingDisabled()).isTrue();
+        assertThat(client.requests().get(1).responseSchemaJson()).isPresent();
+    }
+
+    @Test
     @DisplayName("disabled by default: a text-only step just ends the turn")
     void should_stay_out_of_the_way_when_disabled() {
         // Given
