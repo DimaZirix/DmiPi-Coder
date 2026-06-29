@@ -9,6 +9,17 @@ import java.util.Set;
 /** The shell tool: run_shell_command, gated by the permission layer and run in the session sandbox. */
 public final class ShellPlugin implements Plugin {
 
+    private final boolean backgroundEnabled;
+
+    public ShellPlugin() {
+        this(false);
+    }
+
+    /** Enables background commands (an {@code is_background} parameter); off by default. */
+    public ShellPlugin(final boolean backgroundEnabled) {
+        this.backgroundEnabled = backgroundEnabled;
+    }
+
     @Override
     public Set<CapabilityType> requires() {
         return Set.of(CapabilityType.SHELL);
@@ -16,6 +27,6 @@ public final class ShellPlugin implements Plugin {
 
     @Override
     public void install(final PluginRegistrar registrar, final Capabilities capabilities) {
-        registrar.registerTool(new ShellTool(capabilities.shell()));
+        registrar.registerTool(new ShellTool(capabilities.shell(), backgroundEnabled));
     }
 }

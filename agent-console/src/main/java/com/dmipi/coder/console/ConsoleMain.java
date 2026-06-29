@@ -62,7 +62,7 @@ public final class ConsoleMain {
                     .registerPlugin(new PlanningPlugin())
                     .registerPlugin(new MemoryPlugin())
                     .registerPlugin(new DirectSandboxPlugin())
-                    .registerPlugin(new ShellPlugin())
+                    .registerPlugin(new ShellPlugin(true))
                     .build();
         } catch (final IllegalStateException misconfigured) {
             output.println("Cannot start: " + misconfigured.getMessage());

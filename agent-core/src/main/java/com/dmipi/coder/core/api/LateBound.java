@@ -54,6 +54,11 @@ final class LateBound {
             public ShellResult run(final String command, final Optional<Duration> timeout, final CancelToken cancel) {
                 return boundShell().run(command, timeout, cancel);
             }
+
+            @Override
+            public String runInBackground(final String command) {
+                return boundShell().runInBackground(command);
+            }
         };
     }
 

@@ -17,4 +17,7 @@ public interface Shell {
 
     /** Runs the command with the requested timeout, clamped to the configured maximum. */
     ShellResult run(String command, Optional<Duration> timeout, CancelToken cancel);
+
+    /** Starts the command in the background and returns a handle; the process is killed at session end. */
+    String runInBackground(String command);
 }

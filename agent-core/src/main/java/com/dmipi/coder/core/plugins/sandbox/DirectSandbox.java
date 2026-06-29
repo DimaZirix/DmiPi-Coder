@@ -25,6 +25,11 @@ final class DirectSandbox implements Sandbox {
     }
 
     @Override
+    public Process startBackground(final String command) {
+        return ProcessRunner.start(ProcessRunner.systemShell(command), spec.projectDirectory());
+    }
+
+    @Override
     public String technology() {
         return DirectSandboxProvider.TECHNOLOGY;
     }

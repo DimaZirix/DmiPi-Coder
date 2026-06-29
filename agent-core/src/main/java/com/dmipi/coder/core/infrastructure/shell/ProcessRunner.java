@@ -42,7 +42,8 @@ public final class ProcessRunner {
         return new ShellResult(timedOut ? -1 : process.exitValue(), stdout.text(), stderr.text(), timedOut);
     }
 
-    private static Process start(final List<String> argv, final Path directory) {
+    /** Starts a process without waiting — used for background commands the session tracks and tears down later. */
+    public static Process start(final List<String> argv, final Path directory) {
         try {
             return new ProcessBuilder(argv)
                     .directory(directory.toFile())
@@ -50,6 +51,11 @@ public final class ProcessRunner {
         } catch (final IOException failure) {
             throw new UncheckedIOException("The command could not be started: " + failure.getMessage(), failure);
         }
+    }
+
+    /** Kills a process and its whole descendant tree. */
+    public static void killProcessTree(final Process process) {
+        killTree(process);
     }
 
     /** Waits for the process within the timeout, polling cancellation; true when it was killed for overrunning. */

@@ -32,6 +32,11 @@ final class BubblewrapSandbox implements Sandbox {
         return ProcessRunner.run(wrapped(command), spec.projectDirectory(), timeout, cancel);
     }
 
+    @Override
+    public Process startBackground(final String command) {
+        return ProcessRunner.start(wrapped(command), spec.projectDirectory());
+    }
+
     private List<String> wrapped(final String command) {
         final List<String> argv = new ArrayList<>();
         argv.add("bwrap");

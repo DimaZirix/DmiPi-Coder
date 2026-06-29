@@ -20,7 +20,7 @@ import java.util.Optional;
 final class ShellTool implements Tool {
 
     private static final int OUTPUT_CAP = 30_000;
-    private static final String SCHEMA = """
+    private static final String FOREGROUND_SCHEMA = """
             {
               "type": "object",
               "required": ["command"],
@@ -29,11 +29,23 @@ final class ShellTool implements Tool {
                 "timeout_seconds": {"type": "integer", "description": "Optional timeout; clamped to the configured maximum."}
               }
             }""";
+    private static final String BACKGROUND_SCHEMA = """
+            {
+              "type": "object",
+              "required": ["command"],
+              "properties": {
+                "command": {"type": "string", "description": "The shell command to run, in the project directory."},
+                "timeout_seconds": {"type": "integer", "description": "Optional timeout; clamped to the configured maximum."},
+                "is_background": {"type": "boolean", "description": "Start a long-running command (a server, a watcher) in the background; it is stopped at session end. Do not append a trailing & yourself."}
+              }
+            }""";
 
     private final Shell shell;
+    private final boolean backgroundEnabled;
 
-    ShellTool(final Shell shell) {
+    ShellTool(final Shell shell, final boolean backgroundEnabled) {
         this.shell = shell;
+        this.backgroundEnabled = backgroundEnabled;
     }
 
     @Override
@@ -53,7 +65,7 @@ final class ShellTool implements Tool {
 
     @Override
     public ParameterSchema parameterSchema() {
-        return new ParameterSchema(SCHEMA);
+        return new ParameterSchema(backgroundEnabled ? BACKGROUND_SCHEMA : FOREGROUND_SCHEMA);
     }
 
     @Override
@@ -82,6 +94,14 @@ final class ShellTool implements Tool {
     @Override
     public ToolResult execute(final ToolParams params, final CancelToken cancel) {
         final String command = params.string("command").orElseThrow();
+        if (backgroundEnabled && params.bool("is_background").orElse(false)) {
+            try {
+                final String handle = shell.runInBackground(command);
+                return new ToolResult.Success("Started in the background (" + handle + "). It runs until the session ends.", new Display.Text("background " + handle));
+            } catch (final RuntimeException failure) {
+                return new ToolResult.Failure("The background command could not be started: " + failure.getMessage());
+            }
+        }
         final Optional<Duration> timeout = params.integer("timeout_seconds").map(Duration::ofSeconds);
         final ShellResult result;
         try {
