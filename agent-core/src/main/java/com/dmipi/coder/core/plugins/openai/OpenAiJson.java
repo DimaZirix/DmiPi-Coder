@@ -6,6 +6,7 @@ import com.dmipi.coder.core.domain.llm.LlmException;
 import com.dmipi.coder.core.domain.llm.LlmStreamEvent;
 import com.dmipi.coder.core.domain.llm.ToolCall;
 import com.dmipi.coder.core.domain.llm.ToolSchema;
+import java.util.Optional;
 import java.util.function.Consumer;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -27,7 +28,7 @@ final class OpenAiJson {
     private OpenAiJson() {
     }
 
-    static String writeRequest(final JsonMapper mapper, final String modelId, final ChatRequest request) {
+    static String writeRequest(final JsonMapper mapper, final String modelId, final ChatRequest request, final boolean enableThinking, final Optional<String> responseSchemaJson) {
         final ObjectNode root = mapper.createObjectNode();
         root.put("model", modelId);
         root.put("stream", true);
@@ -42,7 +43,24 @@ final class OpenAiJson {
                 tools.add(toolNode(mapper, schema));
             }
         }
+        if (!enableThinking) {
+            // The llama.cpp / Qwen switch to suppress a thinking phase for this request.
+            root.putObject("chat_template_kwargs").put("enable_thinking", false);
+        }
+        responseSchemaJson.ifPresent(schema -> responseFormat(mapper, root, schema));
         return mapper.writeValueAsString(root);
+    }
+
+    private static void responseFormat(final JsonMapper mapper, final ObjectNode root, final String schemaJson) {
+        final ObjectNode responseFormat = root.putObject("response_format");
+        responseFormat.put("type", "json_schema");
+        final ObjectNode jsonSchema = responseFormat.putObject("json_schema");
+        jsonSchema.put("name", "response");
+        try {
+            jsonSchema.set("schema", mapper.readTree(schemaJson));
+        } catch (final JacksonException invalid) {
+            throw new LlmException("The response schema is not valid JSON: " + invalid.getMessage());
+        }
     }
 
     /** Decodes one stream chunk into events; true when it carried the finish reason. */

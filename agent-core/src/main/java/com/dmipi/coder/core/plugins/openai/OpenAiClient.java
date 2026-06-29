@@ -57,7 +57,11 @@ final class OpenAiClient implements LlmClient {
 
     @Override
     public void stream(final ChatRequest request, final CancelToken cancel, final Consumer<LlmStreamEvent> events) {
-        final HttpResponse<InputStream> response = send(OpenAiJson.writeRequest(mapper, declaration.name(), request));
+        final boolean enableThinking = declaration.options().thinking() && !request.thinkingDisabled();
+        final Optional<String> responseSchema = declaration.options().structuredOutput() == com.dmipi.coder.core.domain.llm.StructuredOutput.AUTO
+                ? request.responseSchemaJson()
+                : Optional.empty();
+        final HttpResponse<InputStream> response = send(OpenAiJson.writeRequest(mapper, declaration.name(), request, enableThinking, responseSchema));
         final InputStream guarded = new IdleStreamGuard(response.body(), Duration.ofSeconds(declaration.options().idleTimeoutSeconds()));
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(guarded, StandardCharsets.UTF_8))) {
             readStream(reader, cancel, events);
