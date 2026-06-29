@@ -1,8 +1,10 @@
 package com.dmipi.coder.core.plugins.planning;
 
 import com.dmipi.coder.core.plugin.Capabilities;
+import com.dmipi.coder.core.plugin.CapabilityType;
 import com.dmipi.coder.core.plugin.Plugin;
 import com.dmipi.coder.core.plugin.PluginRegistrar;
+import java.util.Set;
 
 /**
  * The planning tool: todo_write keeps a visible task list for multi-step work. Requires no
@@ -20,8 +22,14 @@ public final class PlanningPlugin implements Plugin {
             changed. When a request is a single step, skip the list and just do the work.""";
 
     @Override
+    public Set<CapabilityType> requires() {
+        return Set.of(CapabilityType.HIL, CapabilityType.MODES);
+    }
+
+    @Override
     public void install(final PluginRegistrar registrar, final Capabilities capabilities) {
         registrar.registerTool(new TodoWriteTool());
+        registrar.registerTool(new PresentPlanTool(capabilities.hil(), capabilities.modes()));
         registrar.registerInstructionSection(INSTRUCTIONS);
     }
 }

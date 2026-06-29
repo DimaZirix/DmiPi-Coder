@@ -36,6 +36,7 @@ import com.dmipi.coder.core.infrastructure.settings.SettingsLoader;
 import com.dmipi.coder.core.infrastructure.shell.SessionShell;
 import com.dmipi.coder.core.plugin.Capabilities;
 import com.dmipi.coder.core.plugin.Http;
+import com.dmipi.coder.core.plugin.Modes;
 import com.dmipi.coder.core.plugin.CapabilityType;
 import com.dmipi.coder.core.plugin.Configuration;
 import com.dmipi.coder.core.plugin.Plugin;
@@ -400,7 +401,7 @@ public final class Coder implements AutoCloseable {
             final List<List<Tool>> toolsByPlugin = new ArrayList<>();
             for (final Plugin plugin : plugins) {
                 final int before = catalog.tools().size();
-                final Capabilities granted = new Capabilities(hil, text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), new AnchoredFileSystem(userDirectory), http, lateBound.shell(), conversationsEngine.forPlugin(toolsByPlugin.size()));
+                final Capabilities granted = new Capabilities(hil, text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), new AnchoredFileSystem(userDirectory), http, lateBound.shell(), conversationsEngine.forPlugin(toolsByPlugin.size()), modesCapability(gate));
                 plugin.install(catalog, granted.restrictedTo(plugin.requires()));
                 toolsByPlugin.add(catalog.tools().subList(before, catalog.tools().size()));
             }
@@ -432,6 +433,22 @@ public final class Coder implements AutoCloseable {
             parts.add(registry.active().declaration().name());
             parts.add(registry.active().declaration().promptStyle().name());
             return SessionFingerprint.of(parts);
+        }
+
+        /** The modes capability, backed by the gate — read and switch the approval mode. */
+        private static Modes modesCapability(final PermissionGate gate) {
+            return new Modes() {
+
+                @Override
+                public Mode current() {
+                    return gate.mode();
+                }
+
+                @Override
+                public void switchTo(final Mode mode) {
+                    gate.switchMode(mode);
+                }
+            };
         }
 
         /** The reminders component when granted, or null — the date, plan-mode notice, and periodic rules refresher, appended at the tail. */

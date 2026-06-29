@@ -13,5 +13,6 @@ public enum CapabilityType {
     FILE_SYSTEM,
     HTTP,
     SHELL,
-    CONVERSATIONS
+    CONVERSATIONS,
+    MODES
 }
