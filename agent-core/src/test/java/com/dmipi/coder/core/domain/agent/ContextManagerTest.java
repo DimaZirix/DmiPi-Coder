@@ -30,7 +30,7 @@ class ContextManagerTest {
         final ModelDeclaration tinyWindow = new ModelDeclaration("tiny", "scripted", "", Tier.FAST, 200);
         final ScriptedClient client = new ScriptedClient(List.of(
                 ScriptedClient.textStep("x".repeat(1_000)),
-                ScriptedClient.textStep("COMPACTED-STATE: the long answer said x."),
+                ScriptedClient.textStep("<state_snapshot>COMPACTED-STATE: the long answer said x.</state_snapshot>"),
                 ScriptedClient.textStep("continuing")));
 
         // When
@@ -53,10 +53,10 @@ class ContextManagerTest {
                     assertThat(compacted.approxTokensAfter()).isLessThan(compacted.approxTokensBefore());
                 });
 
-        // And the next model request carried the summary instead of the long answer, under intact instructions
+        // And the next model request carried the snapshot (markers stripped) instead of the long answer, under intact instructions
         assertThat(client.requests().getLast().messages().getFirst().role()).isEqualTo(Role.SYSTEM);
         assertThat(client.requests().getLast().messages())
-                .anySatisfy(message -> assertThat(message.content()).contains("COMPACTED-STATE"))
+                .anySatisfy(message -> assertThat(message.content()).contains("COMPACTED-STATE").doesNotContain("<state_snapshot>"))
                 .noneSatisfy(message -> assertThat(message.content()).contains("x".repeat(1_000)));
     }
 

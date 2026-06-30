@@ -20,23 +20,23 @@ public final class ContextManager {
 
     private static final int CHARS_PER_TOKEN = 4;
     private static final int KEEP_RECENT_MESSAGES = 8;
-    private static final String SUMMARY_INSTRUCTIONS = """
-            You compact the older history of a coding-agent conversation into a handover summary. It becomes the agent's only memory of that history.
-            Preserve task state, not prose: what was asked, what was decided, what files were touched and how, what remains open. Be specific with paths and names. Return only the summary.""";
-    private static final String SUMMARY_MARKER = "[Summary of the earlier conversation — the history above it was compacted away.]\n";
+    private static final String SUMMARY_MARKER = "[State snapshot of the earlier conversation — the history above it was compacted away.]\n";
+    private static final java.util.regex.Pattern SNAPSHOT = java.util.regex.Pattern.compile("(?s)<state_snapshot>(.*)</state_snapshot>");
 
     private final ModelRegistry models;
     private final double threshold;
     private final Out out;
+    private final String summaryInstructions;
 
     /** @param threshold the fraction of the active model's window that triggers compaction, e.g. 0.7 */
-    public ContextManager(final ModelRegistry models, final double threshold, final Out out) {
+    public ContextManager(final ModelRegistry models, final double threshold, final Out out, final String summaryInstructions) {
         if (threshold <= 0 || threshold > 1) {
             throw new IllegalArgumentException("The compaction threshold must be in (0, 1], got " + threshold + ".");
         }
         this.models = models;
         this.threshold = threshold;
         this.out = out;
+        this.summaryInstructions = summaryInstructions;
     }
 
     /** Compacts when the approximate budget crosses the threshold; throws when even compaction cannot fit the history. */
@@ -81,7 +81,7 @@ public final class ContextManager {
             transcript.append(message.role().name()).append(": ").append(message.content()).append('\n');
         }
         final ChatRequest request = new ChatRequest(
-                List.of(ChatMessage.system(SUMMARY_INSTRUCTIONS), ChatMessage.user(transcript.toString())),
+                List.of(ChatMessage.system(summaryInstructions), ChatMessage.user(transcript.toString())),
                 List.of());
         final StringBuilder summary = new StringBuilder();
         models.active().client().stream(request, cancel, event -> {
@@ -89,7 +89,13 @@ public final class ContextManager {
                 summary.append(text);
             }
         });
-        return summary.toString().strip();
+        return snapshot(summary.toString().strip());
+    }
+
+    /** The state snapshot inside the markers, or the whole reply when the model did not wrap it. */
+    private static String snapshot(final String reply) {
+        final java.util.regex.Matcher matcher = SNAPSHOT.matcher(reply);
+        return matcher.find() ? matcher.group(1).strip() : reply;
     }
 
     private static int approxTokens(final List<ChatMessage> messages) {

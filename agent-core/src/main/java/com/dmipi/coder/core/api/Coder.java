@@ -416,7 +416,7 @@ public final class Coder implements AutoCloseable {
 
             final EnvironmentFacts environment = resolveEnvironment(registry);
             final Conversation conversation = new Conversation(systemInstructions(catalog, sessionShell, registry, environment));
-            final ContextManager contextManager = new ContextManager(registry, compactionThreshold, out);
+            final ContextManager contextManager = new ContextManager(registry, compactionThreshold, out, PromptResources.load("compaction-prompt.md"));
             final NextSpeakerCheck nextSpeaker = nextSpeakerCheck ? new NextSpeakerCheck(registry) : null;
             final LoopGuards guards = new LoopGuards(contextManager, nextSpeaker, resolveReminders(gate));
             final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn, guards);
