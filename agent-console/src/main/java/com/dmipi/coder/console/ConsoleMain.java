@@ -4,14 +4,20 @@ import com.dmipi.coder.core.api.Coder;
 import com.dmipi.coder.core.application.prompt.CorePrompt;
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.llm.Tier;
+import com.dmipi.coder.core.plugins.bubblewrap.BubblewrapSandboxPlugin;
 import com.dmipi.coder.core.plugins.files.FilesEditPlugin;
 import com.dmipi.coder.core.plugins.files.FilesReadPlugin;
 import com.dmipi.coder.core.plugins.files.ReadTracker;
+import com.dmipi.coder.core.plugins.mcp.McpPlugin;
 import com.dmipi.coder.core.plugins.memory.MemoryPlugin;
 import com.dmipi.coder.core.plugins.openai.OpenAiProviderPlugin;
 import com.dmipi.coder.core.plugins.planning.PlanningPlugin;
+import com.dmipi.coder.core.plugins.podman.PodmanSandboxPlugin;
 import com.dmipi.coder.core.plugins.sandbox.DirectSandboxPlugin;
 import com.dmipi.coder.core.plugins.shell.ShellPlugin;
+import com.dmipi.coder.core.plugins.skills.SkillsPlugin;
+import com.dmipi.coder.core.plugins.subagents.SubagentsPlugin;
+import com.dmipi.coder.core.plugins.web.WebPlugin;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
@@ -56,13 +62,23 @@ public final class ConsoleMain {
                     .loadProjectSettings()
                     .enableSessions()
                     .nextSpeakerCheck()
+                    // The LLM protocol provider.
                     .registerPlugin(new OpenAiProviderPlugin())
+                    // Sandbox providers — all registered; the active one is picked by
+                    // Builder.sandbox("<technology>") (from .coder/settings.json, default "direct").
+                    .registerPlugin(new DirectSandboxPlugin())
+                    .registerPlugin(new BubblewrapSandboxPlugin())
+                    .registerPlugin(new PodmanSandboxPlugin())
+                    // Tools.
                     .registerPlugin(new FilesReadPlugin(readTracker))
                     .registerPlugin(new FilesEditPlugin(readTracker))
+                    .registerPlugin(new ShellPlugin(true))
                     .registerPlugin(new PlanningPlugin())
                     .registerPlugin(new MemoryPlugin())
-                    .registerPlugin(new DirectSandboxPlugin())
-                    .registerPlugin(new ShellPlugin(true))
+                    .registerPlugin(new WebPlugin())
+                    .registerPlugin(new SkillsPlugin())
+                    .registerPlugin(new McpPlugin())
+                    .registerPlugin(new SubagentsPlugin())
                     .build();
         } catch (final IllegalStateException misconfigured) {
             output.println("Cannot start: " + misconfigured.getMessage());
