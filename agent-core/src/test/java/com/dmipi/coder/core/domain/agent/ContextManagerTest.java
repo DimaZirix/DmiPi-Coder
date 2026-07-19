@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.dmipi.coder.core.api.Coder;
 import com.dmipi.coder.core.domain.event.OutEvent;
+import com.dmipi.coder.core.domain.llm.ChatMessage;
 import com.dmipi.coder.core.domain.llm.LlmClient;
+import com.dmipi.coder.core.domain.llm.LlmStreamEvent;
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
+import com.dmipi.coder.core.domain.llm.ModelRegistry;
 import com.dmipi.coder.core.domain.llm.ProtocolProvider;
 import com.dmipi.coder.core.domain.llm.Role;
 import com.dmipi.coder.core.domain.llm.Tier;
@@ -58,6 +61,41 @@ class ContextManagerTest {
         assertThat(client.requests().getLast().messages())
                 .anySatisfy(message -> assertThat(message.content()).contains("COMPACTED-STATE").doesNotContain("<state_snapshot>"))
                 .noneSatisfy(message -> assertThat(message.content()).contains("x".repeat(1_000)));
+    }
+
+    @Test
+    @DisplayName("a cancel during the summary stream leaves the history untouched")
+    void should_not_compact_with_a_cancelled_summary() {
+        // Given: an over-budget history and a model whose summary stream is cancelled midway
+        final ModelDeclaration tinyWindow = new ModelDeclaration("tiny", "scripted", "", Tier.FAST, 200);
+        final LlmClient cancelledMidStream = (request, cancel, events) -> {
+            events.accept(new LlmStreamEvent.TextDelta("a fragment of the summ"));
+            cancel.cancel();
+        };
+        final ModelRegistry models = new ModelRegistry(List.of(tinyWindow), List.of(new ProtocolProvider() {
+
+            @Override
+            public String protocol() {
+                return "scripted";
+            }
+
+            @Override
+            public LlmClient connect(final ModelDeclaration declaration) {
+                return cancelledMidStream;
+            }
+        }));
+        final ContextManager manager = new ContextManager(models, 0.5, out, "summarize");
+        final Conversation conversation = new Conversation("instructions");
+        conversation.add(ChatMessage.user("x".repeat(1_000)));
+        conversation.add(ChatMessage.user("y".repeat(1_000)));
+        final List<ChatMessage> before = List.copyOf(conversation.messages());
+
+        // When
+        manager.maybeCompact(conversation, new CancelToken());
+
+        // Then: no fragment replaced the history, and no compaction was announced
+        assertThat(conversation.messages()).isEqualTo(before);
+        assertThat(out.kinds()).doesNotContain(OutEvent.ContextCompacted.class);
     }
 
     @Test

@@ -50,6 +50,10 @@ public final class ContextManager {
         final int keepFrom = tailStart(conversation.messages());
         if (keepFrom > 1) {
             final String summary = summarize(conversation.messages().subList(1, keepFrom), cancel);
+            if (cancel.isCancelled()) {
+                // A cancelled summary stream may be a fragment; compacting with it would destroy history.
+                return;
+            }
             conversation.compact(keepFrom, ChatMessage.user(SUMMARY_MARKER + summary));
             out.event(new OutEvent.ContextCompacted(before, approxTokens(conversation.messages())));
         }
