@@ -30,8 +30,11 @@ final class ClaudePluginInstaller {
         this.scope = scope;
     }
 
-    /** Installs the named plugin — or the source root when no name is given — and reports what landed where. */
-    String install(final Optional<String> plugin) {
+    /**
+     * Installs the plugin at {@code plugin} — the source root when absent — recording it in the
+     * manifest as {@code name} coming from {@code origin}, and reports what landed where.
+     */
+    String install(final Optional<String> plugin, final String name, final String origin) {
         final String pluginRoot = plugin.orElse("");
         if (!plugin.map(source::directoryExists).orElse(true)) {
             throw new InstallFailure("The source has no plugin directory '" + pluginRoot + "'. " + availablePlugins());
@@ -45,7 +48,8 @@ final class ClaudePluginInstaller {
         }
         final List<String> skills = hasSkills ? installSkills(pluginRoot) : List.of();
         final List<String> servers = hasServers ? installServers(pluginRoot) : List.of();
-        return report(skills, servers, skippedContent(pluginRoot));
+        InstalledPluginsRegistry.record(destination, new InstalledPlugin(name, origin, skills, servers));
+        return report(name, skills, servers, skippedContent(pluginRoot));
     }
 
     private List<String> installSkills(final String pluginRoot) {
@@ -61,7 +65,7 @@ final class ClaudePluginInstaller {
     }
 
     private List<String> installServers(final String pluginRoot) {
-        return McpServersMerge.merge(source.read(join(pluginRoot, MCP_CONFIG)), destination, scope.mcpConfigLocation());
+        return McpServersConfig.merge(source.read(join(pluginRoot, MCP_CONFIG)), destination, scope.mcpConfigLocation());
     }
 
     private List<String> skippedContent(final String pluginRoot) {
@@ -77,9 +81,9 @@ final class ClaudePluginInstaller {
                 : "Plugins found in it: " + String.join(", ", candidates) + ".";
     }
 
-    private String report(final List<String> skills, final List<String> servers, final List<String> skipped) {
+    private String report(final String name, final List<String> skills, final List<String> servers, final List<String> skipped) {
         final StringJoiner report = new StringJoiner("\n");
-        report.add("Installed to the " + scope.label() + " scope.");
+        report.add("Installed '" + name + "' to the " + scope.label() + " scope.");
         if (!skills.isEmpty()) {
             report.add("Skills (now under " + SKILLS_LOCATION + "): " + String.join(", ", skills));
         }

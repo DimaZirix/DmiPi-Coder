@@ -61,6 +61,34 @@ public final class AnchoredFileSystem implements FileSystem {
     }
 
     @Override
+    public void delete(final Path path) {
+        if (!Files.exists(path)) {
+            return;
+        }
+        try {
+            Files.walkFileTree(path, new SimpleFileVisitor<>() {
+
+                @Override
+                public FileVisitResult visitFile(final Path file, final BasicFileAttributes attributes) throws IOException {
+                    Files.delete(file);
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(final Path directory, final IOException failure) throws IOException {
+                    if (failure != null) {
+                        throw failure;
+                    }
+                    Files.delete(directory);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (final IOException failure) {
+            throw new UncheckedIOException("Could not delete " + path + ": " + failure.getMessage(), failure);
+        }
+    }
+
+    @Override
     public List<String> list(final Path directory) {
         try (Stream<Path> entries = Files.list(directory)) {
             return entries

@@ -13,7 +13,9 @@ import java.util.Set;
  * servers merged into the scope's native MCP config — under the user or project anchor. Runtime
  * loading stays single-format: the native skills and MCP plugins pick the installed content up
  * at the next session start. When the call does not say where to install, the user is asked
- * directly through HIL — user space or project space.
+ * directly through HIL — user space or project space. Every install is recorded in a per-anchor
+ * manifest ({@code .coder/installed-plugins.json}), which backs the two companion tools:
+ * {@code list_plugins} and {@code remove_plugin}.
  */
 public final class ClaudePluginInstallerPlugin implements Plugin {
 
@@ -25,5 +27,7 @@ public final class ClaudePluginInstallerPlugin implements Plugin {
     @Override
     public void install(final PluginRegistrar registrar, final Capabilities capabilities) {
         registrar.registerTool(new InstallPluginTool(capabilities.shell(), capabilities.fileSystem(), capabilities.userFileSystem(), capabilities.hil()));
+        registrar.registerTool(new ListPluginsTool(capabilities.fileSystem(), capabilities.userFileSystem()));
+        registrar.registerTool(new RemovePluginTool(capabilities.fileSystem(), capabilities.userFileSystem(), capabilities.hil()));
     }
 }

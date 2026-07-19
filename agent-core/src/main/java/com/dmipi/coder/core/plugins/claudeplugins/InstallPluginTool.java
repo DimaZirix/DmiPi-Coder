@@ -117,7 +117,9 @@ final class InstallPluginTool implements Tool {
             final InstallScope scope = scopeOf(params);
             final FileSystem destination = scope == InstallScope.USER ? userFiles : projectFiles;
             try (PluginSource source = PluginSource.open(shell, sourceLocation, cancel)) {
-                final String report = new ClaudePluginInstaller(source, destination, scope).install(params.string("plugin"));
+                final Optional<String> plugin = params.string("plugin");
+                final String report = new ClaudePluginInstaller(source, destination, scope)
+                        .install(plugin, plugin.orElseGet(() -> nameFrom(sourceLocation)), sourceLocation);
                 return new ToolResult.Success(report, new Display.Text("installed " + callSummary(params) + " (" + scope.label() + " scope)"));
             }
         } catch (final InstallFailure failure) {
@@ -142,5 +144,12 @@ final class InstallPluginTool implements Tool {
                         new Option(InstallScope.PROJECT.label(), "Project space", "this project only"))));
         return InstallScope.of(answer.selected().getFirst())
                 .orElseThrow(() -> new InstallFailure("The scope answer '" + answer.selected().getFirst() + "' matches no scope; valid values: " + InstallScope.validValues() + "."));
+    }
+
+    /** The manifest name for a root-is-plugin install: the last path segment of the source, without a .git suffix. */
+    private static String nameFrom(final String source) {
+        final String trimmed = source.endsWith("/") ? source.substring(0, source.length() - 1) : source;
+        final String last = trimmed.substring(trimmed.lastIndexOf('/') + 1);
+        return last.endsWith(".git") ? last.substring(0, last.length() - ".git".length()) : last;
     }
 }

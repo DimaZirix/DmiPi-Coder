@@ -60,6 +60,21 @@ class AnchoredFileSystemTest {
     }
 
     @Test
+    @DisplayName("delete removes a directory with everything beneath it; a missing path is a no-op")
+    void should_delete_a_directory_tree() {
+        // Given
+        final AnchoredFileSystem files = new AnchoredFileSystem(project);
+        files.write(files.resolve("tree/nested/file.txt"), "content");
+
+        // When
+        files.delete(files.resolve("tree"));
+        files.delete(files.resolve("already-gone"));
+
+        // Then
+        assertThat(files.exists(files.resolve("tree"))).isFalse();
+    }
+
+    @Test
     @DisplayName("reading a missing file fails with a message naming the path")
     void should_fail_reading_a_missing_file() {
         // Given

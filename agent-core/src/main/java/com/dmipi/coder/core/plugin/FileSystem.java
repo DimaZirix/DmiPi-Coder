@@ -18,6 +18,9 @@ public interface FileSystem {
     /** Writes the content, creating parent directories as needed. */
     void write(Path path, String content);
 
+    /** Deletes the file, or the directory with everything beneath it; a missing path is a no-op. */
+    void delete(Path path);
+
     /** The directory's entries, sorted, directories marked with a trailing slash. */
     List<String> list(Path directory);
 

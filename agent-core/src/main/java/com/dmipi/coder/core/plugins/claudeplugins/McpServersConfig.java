@@ -10,16 +10,17 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Merges the servers of a plugin's {@code .mcp.json} into a native MCP config file: an existing
- * config keeps its other servers, a server of the same name is replaced, a missing config is
- * created. Transports are copied verbatim — the native MCP plugin decides what it supports.
+ * Edits a native MCP config file at the server granularity: merge the servers of a plugin's
+ * {@code .mcp.json} in (other servers kept, a same-name server replaced, a missing config
+ * created), or remove servers by name (other servers and unrelated fields kept). Transports are
+ * copied verbatim — the native MCP plugin decides what it supports.
  */
-final class McpServersMerge {
+final class McpServersConfig {
 
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
     private static final String SERVERS_FIELD = "mcpServers";
 
-    private McpServersMerge() {
+    private McpServersConfig() {
     }
 
     /** Merges every server into the config at {@code location}, returning the merged names. */
@@ -38,6 +39,18 @@ final class McpServersMerge {
         }
         destination.write(file, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(root));
         return List.copyOf(merged);
+    }
+
+    /** Removes the named servers from the config at {@code location}; a missing config is a no-op. */
+    static void remove(final List<String> names, final FileSystem destination, final String location) {
+        final Path file = destination.resolve(location);
+        if (!destination.exists(file)) {
+            return;
+        }
+        final ObjectNode root = existingConfig(destination, file, location);
+        final ObjectNode servers = serversOf(root);
+        names.forEach(servers::remove);
+        destination.write(file, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(root));
     }
 
     private static ObjectNode existingConfig(final FileSystem destination, final Path file, final String location) {

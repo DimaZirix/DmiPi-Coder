@@ -187,6 +187,80 @@ class ClaudePluginInstallerPluginTest {
                 .anySatisfy(message -> assertThat(message.content()).contains("java-standards").contains("prompt-standards"));
     }
 
+    @Test
+    @DisplayName("list_plugins reports each installed plugin with its scope, skills, and servers")
+    void should_list_installed_plugins() throws IOException {
+        // Given: a plugin installed to the project, then listed
+        write(marketplace.resolve("prompt-standards/skills/prompt-engineer/SKILL.md"), SKILL);
+        write(marketplace.resolve("prompt-standards/.mcp.json"),
+                "{\"mcpServers\": {\"prompt-linter\": {\"type\": \"http\", \"url\": \"http://127.0.0.1:9/mcp\"}}}");
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", """
+                        {"source": "%s", "plugin": "prompt-standards", "scope": "project"}""".formatted(marketplace)),
+                ScriptedClient.toolCallStep("c2", "list_plugins", "{}"),
+                ScriptedClient.textStep("done")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+
+        // Then
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content())
+                        .contains("project scope:")
+                        .contains("prompt-standards")
+                        .contains("skills: prompt-engineer")
+                        .contains("MCP servers: prompt-linter"));
+    }
+
+    @Test
+    @DisplayName("remove_plugin deletes exactly what the install recorded — foreign servers and hand-written skills stay")
+    void should_remove_an_installed_plugin() throws IOException {
+        // Given: an installed plugin next to a pre-existing server and a hand-written skill
+        write(marketplace.resolve("prompt-standards/skills/prompt-engineer/SKILL.md"), SKILL);
+        write(marketplace.resolve("prompt-standards/.mcp.json"),
+                "{\"mcpServers\": {\"prompt-linter\": {\"type\": \"http\", \"url\": \"http://127.0.0.1:9/mcp\"}}}");
+        write(projectDirectory.resolve(".mcp.json"),
+                "{\"mcpServers\": {\"existing\": {\"type\": \"http\", \"url\": \"http://127.0.0.1:8/mcp\"}}}");
+        write(projectDirectory.resolve(".coder/skills/hand-written/SKILL.md"), "keep me");
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", """
+                        {"source": "%s", "plugin": "prompt-standards", "scope": "project"}""".formatted(marketplace)),
+                ScriptedClient.toolCallStep("c2", "remove_plugin", "{\"name\": \"prompt-standards\"}"),
+                ScriptedClient.textStep("done")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"), Answer.of("allow-once"))));
+
+        // Then: the plugin's skill, server, and manifest entry are gone; everything else survives
+        assertThat(projectDirectory.resolve(".coder/skills/prompt-engineer")).doesNotExist();
+        assertThat(projectDirectory.resolve(".coder/skills/hand-written/SKILL.md")).exists();
+        final JsonNode config = MAPPER.readTree(Files.readString(projectDirectory.resolve(".mcp.json")));
+        assertThat(config.path("mcpServers").path("prompt-linter").isMissingNode()).isTrue();
+        assertThat(config.path("mcpServers").path("existing").path("url").stringValue()).isEqualTo("http://127.0.0.1:8/mcp");
+        assertThat(projectDirectory.resolve(".coder/installed-plugins.json")).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("removing a plugin that is not installed fails naming the installed ones")
+    void should_refuse_to_remove_an_unknown_plugin() throws IOException {
+        // Given: one installed plugin, and an attempt to remove another
+        write(marketplace.resolve("prompt-standards/skills/prompt-engineer/SKILL.md"), SKILL);
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", """
+                        {"source": "%s", "plugin": "prompt-standards", "scope": "project"}""".formatted(marketplace)),
+                ScriptedClient.toolCallStep("c2", "remove_plugin", "{\"name\": \"java-standards\"}"),
+                ScriptedClient.textStep("ok")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"), Answer.of("allow-once"))));
+
+        // Then
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content())
+                        .contains("No plugin named 'java-standards'")
+                        .contains("Installed plugins: prompt-standards"));
+    }
+
     private void runTurn(final ScriptedClient client, final ScriptedHil hil) {
         try (Coder coder = Coder.builder()
                 .out(out)
