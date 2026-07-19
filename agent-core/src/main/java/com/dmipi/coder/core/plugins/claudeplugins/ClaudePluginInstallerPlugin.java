@@ -12,17 +12,18 @@ import java.util.Set;
  * its supported content converted to the native format — skills into {@code .coder/skills}, MCP
  * servers merged into the scope's native MCP config — under the user or project anchor. Runtime
  * loading stays single-format: the native skills and MCP plugins pick the installed content up
- * at the next session start.
+ * at the next session start. When the call does not say where to install, the user is asked
+ * directly through HIL — user space or project space.
  */
 public final class ClaudePluginInstallerPlugin implements Plugin {
 
     @Override
     public Set<CapabilityType> requires() {
-        return Set.of(CapabilityType.SHELL, CapabilityType.FILE_SYSTEM, CapabilityType.CONFIGURATION);
+        return Set.of(CapabilityType.SHELL, CapabilityType.FILE_SYSTEM, CapabilityType.CONFIGURATION, CapabilityType.HIL);
     }
 
     @Override
     public void install(final PluginRegistrar registrar, final Capabilities capabilities) {
-        registrar.registerTool(new InstallPluginTool(capabilities.shell(), capabilities.fileSystem(), capabilities.userFileSystem()));
+        registrar.registerTool(new InstallPluginTool(capabilities.shell(), capabilities.fileSystem(), capabilities.userFileSystem(), capabilities.hil()));
     }
 }

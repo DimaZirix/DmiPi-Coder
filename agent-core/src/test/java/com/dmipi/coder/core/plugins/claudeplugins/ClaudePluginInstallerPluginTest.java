@@ -64,11 +64,14 @@ class ClaudePluginInstallerPluginTest {
                 ScriptedClient.toolCallStep("c1", "install_plugin", """
                         {"source": "%s", "plugin": "prompt-standards", "scope": "project"}""".formatted(marketplace)),
                 ScriptedClient.textStep("done")));
+        final ScriptedHil hil = new ScriptedHil(List.of(Answer.of("allow-once")));
 
         // When
-        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+        runTurn(client, hil);
 
-        // Then: skills land under .coder/skills, the server merges next to the existing one, and the report names both
+        // Then: an explicit scope asks nothing beyond permission; skills land under .coder/skills,
+        // the server merges next to the existing one, and the report names both
+        assertThat(hil.asked()).hasSize(1);
         assertThat(projectDirectory.resolve(".coder/skills/prompt-engineer/SKILL.md")).content().contains("State the action to take");
         assertThat(projectDirectory.resolve(".coder/skills/prompt-engineer/references/rules.md")).content().contains("Condition before action.");
         final JsonNode config = MAPPER.readTree(Files.readString(projectDirectory.resolve(".mcp.json")));
@@ -82,20 +85,26 @@ class ClaudePluginInstallerPluginTest {
     }
 
     @Test
-    @DisplayName("without a scope the plugin installs into the user anchor, available to every project")
-    void should_default_to_the_user_scope() throws IOException {
-        // Given: the source root is itself the plugin
+    @DisplayName("without a scope the user is asked where to install, and the answer decides the anchor")
+    void should_ask_where_to_install_when_no_scope_is_given() throws IOException {
+        // Given: the source root is itself the plugin, and no scope in the call
         write(marketplace.resolve("skills/prompt-engineer/SKILL.md"), SKILL);
         write(marketplace.resolve(".mcp.json"),
                 "{\"mcpServers\": {\"prompt-linter\": {\"type\": \"http\", \"url\": \"http://127.0.0.1:9/mcp\"}}}");
         final ScriptedClient client = new ScriptedClient(List.of(
                 ScriptedClient.toolCallStep("c1", "install_plugin", "{\"source\": \"%s\"}".formatted(marketplace)),
                 ScriptedClient.textStep("done")));
+        final ScriptedHil hil = new ScriptedHil(List.of(Answer.of("allow-once"), Answer.of("user")));
 
         // When
-        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+        runTurn(client, hil);
 
-        // Then
+        // Then: the scope question offered both anchors, and answering 'user' installed there
+        assertThat(hil.asked()).hasSize(2);
+        assertThat(hil.asked().getLast()).satisfies(question -> {
+            assertThat(question.question()).contains("Where should");
+            assertThat(question.options()).extracting(option -> option.id()).containsExactly("user", "project");
+        });
         assertThat(userDirectory.resolve(".coder/skills/prompt-engineer/SKILL.md")).content().contains("State the action to take");
         final JsonNode config = MAPPER.readTree(Files.readString(userDirectory.resolve(".coder/.mcp.json")));
         assertThat(config.path("mcpServers").path("prompt-linter").path("type").stringValue()).isEqualTo("http");
@@ -171,7 +180,7 @@ class ClaudePluginInstallerPluginTest {
                 ScriptedClient.textStep("ok")));
 
         // When
-        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"), Answer.of("user"))));
 
         // Then
         assertThat(client.requests().getLast().messages())
