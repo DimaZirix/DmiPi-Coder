@@ -10,10 +10,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Loads Claude-format skills — {@code skills/<name>/SKILL.md} with a YAML-ish frontmatter
- * carrying {@code name} and {@code description} — from {@code .coder/skills} under the user and
- * project anchors. On a name clash, project wins. A file without frontmatter still loads: the
- * directory name and first body line stand in.
+ * Loads skills in the native format — {@code .coder/skills/<name>/SKILL.md} with a YAML-ish
+ * frontmatter carrying {@code name} and {@code description} — from the user and project anchors.
+ * On a name clash, project wins. A file without frontmatter still loads: the directory name and
+ * first body line stand in. The file layout is deliberately Claude-compatible, so an installer
+ * can drop foreign skills in unchanged.
  */
 final class SkillLibrary {
 

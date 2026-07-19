@@ -5,6 +5,7 @@ import com.dmipi.coder.core.application.prompt.CorePrompt;
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.llm.Tier;
 import com.dmipi.coder.core.plugins.bubblewrap.BubblewrapSandboxPlugin;
+import com.dmipi.coder.core.plugins.claudeplugins.ClaudePluginInstallerPlugin;
 import com.dmipi.coder.core.plugins.files.FilesEditPlugin;
 import com.dmipi.coder.core.plugins.files.FilesReadPlugin;
 import com.dmipi.coder.core.plugins.files.ReadTracker;
@@ -78,6 +79,7 @@ public final class ConsoleMain {
                     .registerPlugin(new WebPlugin())
                     .registerPlugin(new SkillsPlugin())
                     .registerPlugin(new McpPlugin())
+                    .registerPlugin(new ClaudePluginInstallerPlugin())
                     .registerPlugin(new SubagentsPlugin())
                     .build();
         } catch (final IllegalStateException misconfigured) {

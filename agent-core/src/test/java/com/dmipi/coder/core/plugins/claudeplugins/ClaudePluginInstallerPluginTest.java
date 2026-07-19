@@ -1,0 +1,232 @@
+package com.dmipi.coder.core.plugins.claudeplugins;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.dmipi.coder.core.api.Coder;
+import com.dmipi.coder.core.domain.agent.CancelToken;
+import com.dmipi.coder.core.domain.hil.Answer;
+import com.dmipi.coder.core.domain.llm.LlmClient;
+import com.dmipi.coder.core.domain.llm.ModelDeclaration;
+import com.dmipi.coder.core.domain.llm.ProtocolProvider;
+import com.dmipi.coder.core.domain.llm.Tier;
+import com.dmipi.coder.core.plugin.Capabilities;
+import com.dmipi.coder.core.plugin.Plugin;
+import com.dmipi.coder.core.plugin.PluginRegistrar;
+import com.dmipi.coder.core.plugins.sandbox.DirectSandboxPlugin;
+import com.dmipi.coder.core.testfixtures.RecordingOut;
+import com.dmipi.coder.core.testfixtures.ScriptedClient;
+import com.dmipi.coder.core.testfixtures.ScriptedHil;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+class ClaudePluginInstallerPluginTest {
+
+    private static final ModelDeclaration MODEL = new ModelDeclaration("test", "scripted", "", Tier.FAST, 8_000);
+    private static final JsonMapper MAPPER = JsonMapper.builder().build();
+    private static final String SKILL = """
+            ---
+            name: prompt-engineer
+            description: Apply prompt standards.
+            ---
+            State the action to take, not the action to avoid.""";
+
+    @TempDir
+    private Path marketplace;
+
+    @TempDir
+    private Path userDirectory;
+
+    @TempDir
+    private Path projectDirectory;
+
+    private final RecordingOut out = new RecordingOut();
+
+    @Test
+    @DisplayName("a marketplace plugin installs into the project in the native format: skills copied, MCP servers merged")
+    void should_install_a_marketplace_plugin_into_the_project() throws IOException {
+        // Given: a marketplace plugin with a skill (plus a support file), an .mcp.json, and unsupported content
+        write(marketplace.resolve("prompt-standards/skills/prompt-engineer/SKILL.md"), SKILL);
+        write(marketplace.resolve("prompt-standards/skills/prompt-engineer/references/rules.md"), "Condition before action.");
+        write(marketplace.resolve("prompt-standards/.mcp.json"),
+                "{\"mcpServers\": {\"prompt-linter\": {\"type\": \"http\", \"url\": \"http://127.0.0.1:9/mcp\"}}}");
+        write(marketplace.resolve("prompt-standards/agents/reviewer.md"), "unsupported");
+        write(projectDirectory.resolve(".mcp.json"),
+                "{\"mcpServers\": {\"existing\": {\"type\": \"http\", \"url\": \"http://127.0.0.1:8/mcp\"}}}");
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", """
+                        {"source": "%s", "plugin": "prompt-standards", "scope": "project"}""".formatted(marketplace)),
+                ScriptedClient.textStep("done")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+
+        // Then: skills land under .coder/skills, the server merges next to the existing one, and the report names both
+        assertThat(projectDirectory.resolve(".coder/skills/prompt-engineer/SKILL.md")).content().contains("State the action to take");
+        assertThat(projectDirectory.resolve(".coder/skills/prompt-engineer/references/rules.md")).content().contains("Condition before action.");
+        final JsonNode config = MAPPER.readTree(Files.readString(projectDirectory.resolve(".mcp.json")));
+        assertThat(config.path("mcpServers").path("existing").path("url").stringValue()).isEqualTo("http://127.0.0.1:8/mcp");
+        assertThat(config.path("mcpServers").path("prompt-linter").path("url").stringValue()).isEqualTo("http://127.0.0.1:9/mcp");
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content())
+                        .contains("prompt-engineer")
+                        .contains("prompt-linter")
+                        .contains("Skipped unsupported Claude content: agents"));
+    }
+
+    @Test
+    @DisplayName("without a scope the plugin installs into the user anchor, available to every project")
+    void should_default_to_the_user_scope() throws IOException {
+        // Given: the source root is itself the plugin
+        write(marketplace.resolve("skills/prompt-engineer/SKILL.md"), SKILL);
+        write(marketplace.resolve(".mcp.json"),
+                "{\"mcpServers\": {\"prompt-linter\": {\"type\": \"http\", \"url\": \"http://127.0.0.1:9/mcp\"}}}");
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", "{\"source\": \"%s\"}".formatted(marketplace)),
+                ScriptedClient.textStep("done")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+
+        // Then
+        assertThat(userDirectory.resolve(".coder/skills/prompt-engineer/SKILL.md")).content().contains("State the action to take");
+        final JsonNode config = MAPPER.readTree(Files.readString(userDirectory.resolve(".coder/.mcp.json")));
+        assertThat(config.path("mcpServers").path("prompt-linter").path("type").stringValue()).isEqualTo("http");
+    }
+
+    @Test
+    @DisplayName("a .git source is cloned before installing")
+    void should_clone_a_git_source() throws IOException, InterruptedException {
+        // Given: the plugin committed to a bare repository
+        final Path work = marketplace.resolve("work");
+        write(work.resolve("skills/prompt-engineer/SKILL.md"), SKILL);
+        git(work, "init", "--quiet");
+        git(work, "add", ".");
+        git(work, "-c", "user.name=test", "-c", "user.email=test@test", "commit", "--quiet", "-m", "plugin");
+        git(marketplace, "clone", "--quiet", "--bare", work.toString(), marketplace.resolve("plugin.git").toString());
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", """
+                        {"source": "%s", "scope": "project"}""".formatted(marketplace.resolve("plugin.git"))),
+                ScriptedClient.textStep("done")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+
+        // Then
+        assertThat(projectDirectory.resolve(".coder/skills/prompt-engineer/SKILL.md")).content().contains("State the action to take");
+    }
+
+    @Test
+    @DisplayName("a denied permission question installs nothing")
+    void should_install_nothing_when_the_user_denies() throws IOException {
+        // Given
+        write(marketplace.resolve("skills/prompt-engineer/SKILL.md"), SKILL);
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", "{\"source\": \"%s\"}".formatted(marketplace)),
+                ScriptedClient.textStep("ok")));
+        final ScriptedHil hil = new ScriptedHil(List.of(Answer.of("deny")));
+
+        // When
+        runTurn(client, hil);
+
+        // Then: the question previewed the install, and no skill was written anywhere
+        assertThat(hil.asked()).singleElement().satisfies(question -> assertThat(question.preview()).contains(marketplace.toString()));
+        assertThat(userDirectory.resolve(".coder/skills")).doesNotExist();
+        assertThat(projectDirectory.resolve(".coder/skills")).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("an unknown scope is refused with the valid values")
+    void should_refuse_an_unknown_scope() throws IOException {
+        // Given
+        write(marketplace.resolve("skills/prompt-engineer/SKILL.md"), SKILL);
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", """
+                        {"source": "%s", "scope": "global"}""".formatted(marketplace)),
+                ScriptedClient.textStep("ok")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+
+        // Then
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content()).contains("Unknown scope 'global'").contains("user, project"));
+    }
+
+    @Test
+    @DisplayName("pointing at a marketplace root without naming a plugin lists the plugins it holds")
+    void should_list_marketplace_plugins_when_none_is_named() throws IOException {
+        // Given: two plugins in the marketplace, none picked
+        write(marketplace.resolve("prompt-standards/skills/prompt-engineer/SKILL.md"), SKILL);
+        write(marketplace.resolve("java-standards/.mcp.json"), "{\"mcpServers\": {}}");
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", "{\"source\": \"%s\"}".formatted(marketplace)),
+                ScriptedClient.textStep("ok")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+
+        // Then
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content()).contains("java-standards").contains("prompt-standards"));
+    }
+
+    private void runTurn(final ScriptedClient client, final ScriptedHil hil) {
+        try (Coder coder = Coder.builder()
+                .out(out)
+                .hil(hil)
+                .model(MODEL)
+                .userDirectory(userDirectory)
+                .projectDirectory(projectDirectory)
+                .registerPlugin(providerPlugin(client))
+                .registerPlugin(new DirectSandboxPlugin())
+                .registerPlugin(new ClaudePluginInstallerPlugin())
+                .build()) {
+            coder.runTurn("install it", new CancelToken());
+        }
+    }
+
+    private static void write(final Path file, final String content) throws IOException {
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, content);
+    }
+
+    private static void git(final Path workingDirectory, final String... arguments) throws IOException, InterruptedException {
+        final List<String> command = new ArrayList<>(List.of("git"));
+        command.addAll(List.of(arguments));
+        final Process process = new ProcessBuilder(command)
+                .directory(workingDirectory.toFile())
+                .redirectErrorStream(true)
+                .start();
+        final String output = new String(process.getInputStream().readAllBytes());
+        assertThat(process.waitFor()).withFailMessage("git %s failed: %s", List.of(arguments), output).isZero();
+    }
+
+    private static Plugin providerPlugin(final ScriptedClient client) {
+        return new Plugin() {
+
+            @Override
+            public void install(final PluginRegistrar registrar, final Capabilities capabilities) {
+                registrar.registerProtocolProvider(new ProtocolProvider() {
+
+                    @Override
+                    public String protocol() {
+                        return "scripted";
+                    }
+
+                    @Override
+                    public LlmClient connect(final ModelDeclaration declaration) {
+                        return client;
+                    }
+                });
+            }
+        };
+    }
+}
