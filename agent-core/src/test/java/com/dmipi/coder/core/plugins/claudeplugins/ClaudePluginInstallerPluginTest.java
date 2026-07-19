@@ -213,6 +213,26 @@ class ClaudePluginInstallerPluginTest {
     }
 
     @Test
+    @DisplayName("skills no plugin owns are listed too — 'no plugins' never hides existing skills")
+    void should_report_skills_no_plugin_owns() throws IOException {
+        // Given: a skill written by hand (or installed before the manifest existed), no plugins
+        write(userDirectory.resolve(".coder/skills/senior-java-developer/SKILL.md"), "hand-written");
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "list_plugins", "{}"),
+                ScriptedClient.textStep("done")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of()));
+
+        // Then
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content())
+                        .contains("No plugins are installed.")
+                        .contains("not installed by any plugin")
+                        .contains("senior-java-developer"));
+    }
+
+    @Test
     @DisplayName("remove_plugin deletes exactly what the install recorded — foreign servers and hand-written skills stay")
     void should_remove_an_installed_plugin() throws IOException {
         // Given: an installed plugin next to a pre-existing server and a hand-written skill
