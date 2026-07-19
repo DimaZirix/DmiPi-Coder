@@ -45,6 +45,33 @@ class PermissionRulesTest {
     }
 
     @Test
+    @DisplayName("a rule glob matches the whole summary — a command merely containing the glob text does not fire it")
+    void should_not_fire_on_a_substring_match() {
+        // Given: an allow rule `ls*` and a deny rule `rm*`
+        final PermissionRules rules = new PermissionRules(List.of(
+                new PermissionRule("run_shell_command", "ls*", PermissionDecision.ALLOW),
+                new PermissionRule("run_shell_command", "rm*", PermissionDecision.DENY)));
+
+        // When / Then: `false` contains "ls" and `confirm` contains "rm" — neither rule may fire
+        assertThat(rules.decisionFor(shell, params("false"))).isEmpty();
+        assertThat(rules.decisionFor(shell, params("confirm"))).isEmpty();
+        assertThat(rules.decisionFor(shell, params("ls -la"))).contains(PermissionDecision.ALLOW);
+        assertThat(rules.decisionFor(shell, params("rm notes.txt"))).contains(PermissionDecision.DENY);
+    }
+
+    @Test
+    @DisplayName("a glob without a star matches only the exact summary")
+    void should_match_a_starless_glob_exactly() {
+        // Given
+        final PermissionRules rules = new PermissionRules(List.of(
+                new PermissionRule("run_shell_command", "git status", PermissionDecision.ALLOW)));
+
+        // When / Then
+        assertThat(rules.decisionFor(shell, params("git status"))).contains(PermissionDecision.ALLOW);
+        assertThat(rules.decisionFor(shell, params("git status --short"))).isEmpty();
+    }
+
+    @Test
     @DisplayName("a deny rule blocks the call in every mode, even allow-all")
     void should_deny_a_matching_call_in_every_mode() {
         // Given
