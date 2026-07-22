@@ -7,6 +7,8 @@ import com.dmipi.coder.core.domain.hil.Answer;
 import com.dmipi.coder.core.domain.permissions.GateDecision;
 import com.dmipi.coder.core.domain.permissions.Mode;
 import com.dmipi.coder.core.domain.permissions.PermissionDecision;
+import com.dmipi.coder.core.domain.agent.CancelToken;
+import com.dmipi.coder.core.domain.tool.ParameterSchema;
 import com.dmipi.coder.core.domain.tool.Tool;
 import com.dmipi.coder.core.domain.tool.ToolKind;
 import com.dmipi.coder.core.domain.tool.ToolParams;
@@ -15,6 +17,7 @@ import com.dmipi.coder.core.infrastructure.json.JacksonToolParamsParser;
 import com.dmipi.coder.core.testfixtures.ScriptedHil;
 import com.dmipi.coder.core.testfixtures.StubTool;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -62,6 +65,70 @@ class PermissionGateTest {
         assertThat(gate.decide(askingTool, params)).isInstanceOf(GateDecision.Allowed.class);
         assertThat(gate.decide(askingTool, params)).isInstanceOf(GateDecision.Allowed.class);
         assertThat(hil.asked()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("'always allow' on a shell command covers only that exact command — a different command asks again")
+    void should_scope_an_always_answer_to_the_exact_command_for_execute_tools() {
+        // Given: an EXECUTE tool whose summary is the command, and 'always' answered for git status
+        final Tool shell = new Tool() {
+
+            @Override
+            public String name() {
+                return "run_shell_command";
+            }
+
+            @Override
+            public String description() {
+                return "stub";
+            }
+
+            @Override
+            public ToolKind kind() {
+                return ToolKind.EXECUTE;
+            }
+
+            @Override
+            public ParameterSchema parameterSchema() {
+                return new ParameterSchema("{}");
+            }
+
+            @Override
+            public Optional<String> validate(final ToolParams params) {
+                return Optional.empty();
+            }
+
+            @Override
+            public PermissionDecision defaultPermission(final ToolParams params) {
+                return PermissionDecision.ASK;
+            }
+
+            @Override
+            public String callSummary(final ToolParams params) {
+                return params.string("command").orElse("");
+            }
+
+            @Override
+            public ToolResult execute(final ToolParams params, final CancelToken cancel) {
+                return new ToolResult.Failure("never runs in this test");
+            }
+        };
+        final ScriptedHil hil = new ScriptedHil(List.of(Answer.of("allow-always"), Answer.of("deny")));
+        final PermissionGate gate = new PermissionGate(hil, Mode.DEFAULT);
+        final JacksonToolParamsParser parser = new JacksonToolParamsParser(JsonMapper.builder().build());
+
+        // When: git status is always-allowed, then a different command arrives
+        final GateDecision first = gate.decide(shell, parser.parse("{\"command\": \"git status\"}"));
+        final GateDecision repeat = gate.decide(shell, parser.parse("{\"command\": \"git status\"}"));
+        final GateDecision different = gate.decide(shell, parser.parse("{\"command\": \"rm -rf ~/projects\"}"));
+
+        // Then: the exact command is remembered, the different one asked again and was denied
+        assertThat(first).isInstanceOf(GateDecision.Allowed.class);
+        assertThat(repeat).isInstanceOf(GateDecision.Allowed.class);
+        assertThat(different).isInstanceOf(GateDecision.Denied.class);
+        assertThat(hil.asked()).hasSize(2);
+        assertThat(hil.asked().getFirst().options())
+                .anySatisfy(option -> assertThat(option.label()).contains("this exact command"));
     }
 
     @Test
