@@ -17,7 +17,8 @@ import java.util.regex.Pattern;
 public final class HardLimits {
 
     private static final List<Pattern> FORBIDDEN_COMMANDS = List.of(
-            Pattern.compile("\\brm\\s+(?:-\\w*\\s+)*-\\w*[rR]\\w*\\s+(?:-\\w+\\s+)*[\"']?/(?:\\s|$|\\*)"),
+            // rm with a recursive flag — short (-r, -rf, -R) or long (--recursive) — targeting the root.
+            Pattern.compile("\\brm\\s+(?:--?[\\w-]+\\s+)*(?:-\\w*[rR]\\w*|--recursive)\\s+(?:--?[\\w-]+\\s+)*[\"']?/(?:\\s|$|\\*)"),
             Pattern.compile("\\bmkfs\\b"),
             Pattern.compile("\\bdd\\b[^\\n]*\\bof=/dev/"),
             Pattern.compile(">\\s*/dev/[sh]d[a-z]"),
@@ -31,7 +32,7 @@ public final class HardLimits {
         final String command = tool.callSummary(params);
         for (final Pattern forbidden : FORBIDDEN_COMMANDS) {
             if (forbidden.matcher(command).find()) {
-                return Optional.of("This command is refused as unconditionally destructive (a hard safety limit).");
+                return Optional.of("The command '" + command + "' is refused as unconditionally destructive (a hard safety limit).");
             }
         }
         return Optional.empty();
