@@ -106,6 +106,30 @@ class SettingsLoaderTest {
         }
     }
 
+    @Test
+    @DisplayName("overriding a declared model keeps its position — the active model does not silently change")
+    void should_keep_the_active_model_when_settings_override_it() throws IOException {
+        // Given: the builder declares [primary, fallback]; settings override primary's endpoint
+        writeSettings(projectDirectory, """
+                {"models": [{"name": "primary", "protocol": "scripted", "endpoint": "http://overridden", "tier": "fast", "contextWindow": 8000}]}""");
+
+        // When
+        try (Coder coder = Coder.builder()
+                .out(new RecordingOut())
+                .hil(new ScriptedHil(List.of()))
+                .projectDirectory(projectDirectory)
+                .model(new ModelDeclaration("primary", "scripted", "http://original", Tier.FAST, 8_000))
+                .model(new ModelDeclaration("fallback", "scripted", "http://fallback", Tier.FAST, 8_000))
+                .loadProjectSettings()
+                .registerPlugin(providerPlugin(new ScriptedClient(List.of())))
+                .build()) {
+
+            // Then: primary is still first and active, with the overridden endpoint
+            assertThat(coder.activeModel().name()).isEqualTo("primary");
+            assertThat(coder.activeModel().endpoint()).isEqualTo("http://overridden");
+        }
+    }
+
     private static void writeSettings(final Path anchor, final String json) throws IOException {
         Files.createDirectories(anchor.resolve(".coder"));
         Files.writeString(anchor.resolve(".coder/settings.json"), json);

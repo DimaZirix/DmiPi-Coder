@@ -288,8 +288,14 @@ public final class Coder implements AutoCloseable {
 
         private Builder apply(final Settings settings) {
             for (final ModelDeclaration declared : settings.models()) {
-                models.removeIf(existing -> existing.name().equals(declared.name()));
-                models.add(declared);
+                // Replace in place: the first declared model is the active one, and an override
+                // of its endpoint must not demote it to the end of the list.
+                final int existing = indexOfModel(declared.name());
+                if (existing >= 0) {
+                    models.set(existing, declared);
+                } else {
+                    models.add(declared);
+                }
             }
             settings.mode().ifPresent(this::mode);
             settings.sandboxTechnology().ifPresent(this::sandbox);
@@ -298,6 +304,15 @@ public final class Coder implements AutoCloseable {
             settings.shellMaxTimeout().ifPresent(timeout -> shellMaxTimeout = timeout);
             permissionRules.addAll(settings.permissionRules());
             return this;
+        }
+
+        private int indexOfModel(final String name) {
+            for (int i = 0; i < models.size(); i++) {
+                if (models.get(i).name().equals(name)) {
+                    return i;
+                }
+            }
+            return -1;
         }
 
         /** Adds a permission rule directly, as an alternative to declaring it in settings. */
