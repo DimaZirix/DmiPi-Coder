@@ -115,16 +115,29 @@ final class ShellTool implements Tool {
     /** Labeled fields, always present, so the model can read exit status and each stream unambiguously — partial output is kept even on timeout. */
     private static ToolResult report(final String command, final ShellResult result) {
         final String body = "Command: " + command
-                + "\nExit code: " + (result.timedOut() ? "killed (timeout)" : result.exitCode())
+                + "\nExit code: " + exitLabel(result)
                 + "\nStdout:\n" + capped(result.stdout())
                 + "\nStderr:\n" + capped(result.stderr());
         if (result.timedOut()) {
             return new ToolResult.Failure("The command was killed for exceeding its timeout.\n" + body);
         }
+        if (result.cancelled()) {
+            return new ToolResult.Failure("The command was cancelled by the user and killed before finishing.\n" + body);
+        }
         if (!result.succeeded()) {
             return new ToolResult.Failure(body);
         }
         return new ToolResult.Success(body, new Display.Text("exit 0"));
+    }
+
+    private static String exitLabel(final ShellResult result) {
+        if (result.timedOut()) {
+            return "killed (timeout)";
+        }
+        if (result.cancelled()) {
+            return "killed (cancelled)";
+        }
+        return String.valueOf(result.exitCode());
     }
 
     private static String capped(final String text) {

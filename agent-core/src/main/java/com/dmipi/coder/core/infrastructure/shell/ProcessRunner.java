@@ -38,8 +38,10 @@ public final class ProcessRunner {
         final Process process = start(argv, directory);
         final CappedCapture stdout = CappedCapture.of(process.getInputStream());
         final CappedCapture stderr = CappedCapture.of(process.getErrorStream());
-        final boolean timedOut = awaitOrKill(process, timeout, cancel);
-        return new ShellResult(timedOut ? -1 : process.exitValue(), stdout.text(), stderr.text(), timedOut);
+        final Outcome outcome = awaitOrKill(process, timeout, cancel);
+        // exitValue is only safe after a natural exit — a killed process may survive the bounded kill wait.
+        final int exitCode = outcome == Outcome.COMPLETED ? process.exitValue() : -1;
+        return new ShellResult(exitCode, stdout.text(), stderr.text(), outcome == Outcome.TIMED_OUT, outcome == Outcome.CANCELLED);
     }
 
     /** Starts a process without waiting — used for background commands the session tracks and tears down later. */
@@ -58,18 +60,29 @@ public final class ProcessRunner {
         killTree(process);
     }
 
-    /** Waits for the process within the timeout, polling cancellation; true when it was killed for overrunning. */
-    private static boolean awaitOrKill(final Process process, final Duration timeout, final CancelToken cancel) {
+    /** How the wait ended: the process exited by itself, or was killed for a timeout or a cancel. */
+    private enum Outcome {
+        COMPLETED,
+        TIMED_OUT,
+        CANCELLED
+    }
+
+    /** Waits for the process within the timeout, polling cancellation; kills the tree on either limit. */
+    private static Outcome awaitOrKill(final Process process, final Duration timeout, final CancelToken cancel) {
         final Instant deadline = Instant.now().plus(timeout);
         try {
             while (process.isAlive()) {
-                if (cancel.isCancelled() || !Instant.now().isBefore(deadline)) {
+                if (cancel.isCancelled()) {
                     killTree(process);
-                    return !cancel.isCancelled();
+                    return Outcome.CANCELLED;
+                }
+                if (!Instant.now().isBefore(deadline)) {
+                    killTree(process);
+                    return Outcome.TIMED_OUT;
                 }
                 process.waitFor(POLL_INTERVAL.toMillis(), TimeUnit.MILLISECONDS);
             }
-            return false;
+            return Outcome.COMPLETED;
         } catch (final InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             killTree(process);

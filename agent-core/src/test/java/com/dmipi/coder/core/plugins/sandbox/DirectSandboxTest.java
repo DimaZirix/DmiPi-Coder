@@ -75,9 +75,11 @@ class DirectSandboxTest {
         // When
         final ShellResult result = sandbox().run("sleep 30", Duration.ofSeconds(60), cancel);
 
-        // Then
+        // Then: marked cancelled — not a timeout, not an ordinary failure, and no crash
+        assertThat(result.cancelled()).isTrue();
         assertThat(result.timedOut()).isFalse();
         assertThat(result.succeeded()).isFalse();
+        assertThat(result.exitCode()).isEqualTo(-1);
         assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofSeconds(10));
     }
 
