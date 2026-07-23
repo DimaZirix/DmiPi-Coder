@@ -66,6 +66,7 @@ public final class Console {
         try {
             return input.readLine();
         } catch (final java.io.IOException failure) {
+            output.println("(standard input failed: " + failure.getMessage() + " — exiting)");
             return null;
         }
     }

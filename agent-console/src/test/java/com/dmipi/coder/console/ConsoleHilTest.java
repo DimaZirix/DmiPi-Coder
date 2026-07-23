@@ -1,6 +1,7 @@
 package com.dmipi.coder.console;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import com.dmipi.coder.core.domain.hil.Answer;
 import com.dmipi.coder.core.domain.hil.Option;
@@ -46,6 +47,32 @@ class ConsoleHilTest {
         // Then
         assertThat(answer.selected()).containsExactly("a");
         assertThat(out.toString()).contains("single valid number");
+    }
+
+    @Test
+    @DisplayName("input ending while a question is open fails loudly instead of looping forever")
+    void should_fail_loudly_when_input_ends_mid_question() {
+        // Given: a question and a stdin that is already at end-of-file
+        final Question question = new Question("Allow the edit?", "", QuestionKind.OPTION_LIST,
+                List.of(new Option("allow-once", "Allow"), new Option("deny", "Deny")));
+
+        // When / Then: no spin, no silent answer — an error naming the open question
+        assertThatIllegalStateException()
+                .isThrownBy(() -> hil("").ask(question))
+                .withMessageContaining("Allow the edit?");
+    }
+
+    @Test
+    @DisplayName("input ending after invalid attempts still fails loudly, not with an infinite re-prompt")
+    void should_fail_loudly_when_input_ends_after_bad_attempts() {
+        // Given
+        final Question question = new Question("Pick", "", QuestionKind.OPTION_LIST,
+                List.of(new Option("a", "A"), new Option("b", "B")));
+
+        // When / Then: one junk line, then EOF
+        assertThatIllegalStateException()
+                .isThrownBy(() -> hil("junk\n").ask(question))
+                .withMessageContaining("Pick");
     }
 
     @Test

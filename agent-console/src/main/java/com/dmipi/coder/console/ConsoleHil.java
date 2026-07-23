@@ -42,7 +42,11 @@ public final class ConsoleHil implements Hil {
         output.flush();
 
         while (true) {
-            final List<String> selected = parse(readLine(), options, question.kind());
+            final String line = readLine();
+            if (line == null) {
+                throw new IllegalStateException("Standard input closed while the question '" + question.question() + "' was open — no answer is possible.");
+            }
+            final List<String> selected = parse(line, options, question.kind());
             if (selected != null) {
                 return new Answer(selected);
             }
@@ -53,9 +57,6 @@ public final class ConsoleHil implements Hil {
 
     /** The selected option ids, or null when the line does not fit the question's shape. */
     private static List<String> parse(final String line, final List<Option> options, final QuestionKind kind) {
-        if (line == null) {
-            return null;
-        }
         final List<String> ids = new ArrayList<>();
         for (final String token : Arrays.stream(line.trim().split(",")).map(String::trim).filter(part -> !part.isBlank()).toList()) {
             final int index = parseIndex(token, options.size());
@@ -82,10 +83,12 @@ public final class ConsoleHil implements Hil {
         }
     }
 
+    /** The next input line, or null when input has ended — a failure counts as ended, but says why. */
     private String readLine() {
         try {
             return input.readLine();
         } catch (final java.io.IOException failure) {
+            output.println("(standard input failed: " + failure.getMessage() + ")");
             return null;
         }
     }
