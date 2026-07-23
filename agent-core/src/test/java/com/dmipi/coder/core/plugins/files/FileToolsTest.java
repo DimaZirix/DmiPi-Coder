@@ -128,6 +128,40 @@ class FileToolsTest {
     }
 
     @Test
+    @DisplayName("preview and execute agree on a numbered old_string — the approved diff is the applied diff")
+    void should_preview_and_execute_identically_for_numbered_strings() throws IOException {
+        // Given: old_string pasted with read_file numbering, which only matches after stripping
+        Files.writeString(project.resolve("f.txt"), "alpha\nbeta\ngamma");
+        final EditTool tool = new EditTool(files());
+        final ToolParams numbered = params("{\"path\": \"f.txt\", \"old_string\": \"     2\\tbeta\", \"new_string\": \"     2\\tBETA\"}");
+
+        // When
+        final String preview = tool.preview(numbered);
+        final ToolResult result = tool.execute(numbered, new CancelToken());
+
+        // Then: the preview showed the real diff (not a bogus 'will fail'), and execution matched it
+        assertThat(preview).doesNotContain("will fail").contains("-beta").contains("+BETA");
+        assertThat(result).isInstanceOf(ToolResult.Success.class);
+        assertThat(project.resolve("f.txt")).hasContent("alpha\nBETA\ngamma");
+    }
+
+    @Test
+    @DisplayName("genuine wide digits+tab data matches as written — no stripping corrupts it")
+    void should_edit_wide_tab_separated_data_verbatim() throws IOException {
+        // Given: a TSV line whose field is 6+ wide — exactly the shape stripping used to eat
+        Files.writeString(project.resolve("data.tsv"), "   100\tvalue\n   200\tother");
+        final EditTool tool = new EditTool(files());
+
+        // When
+        final ToolResult result = tool.execute(
+                params("{\"path\": \"data.tsv\", \"old_string\": \"   100\\tvalue\", \"new_string\": \"   100\\tupdated\"}"), new CancelToken());
+
+        // Then: the raw match won; the prefix survived in the file
+        assertThat(result).isInstanceOf(ToolResult.Success.class);
+        assertThat(project.resolve("data.tsv")).hasContent("   100\tupdated\n   200\tother");
+    }
+
+    @Test
     @DisplayName("edit refuses a missing match and an ambiguous match, with counts")
     void should_refuse_missing_and_ambiguous_matches() throws IOException {
         // Given

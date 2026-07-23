@@ -106,16 +106,14 @@ final class EditTool implements Tool {
             return fallbackPreview(params);
         }
 
-        final String oldString = adaptedToFile(content, params.string("old_string").orElse(""));
-        final String newString = adaptedToFile(content, params.string("new_string").orElse(""));
-        final int occurrences = count(content, oldString);
-        if (occurrences == 0) {
+        final Resolution resolved = resolve(content, params.string("old_string").orElse(""), params.string("new_string").orElse(""));
+        if (resolved.occurrences() == 0) {
             return "(old_string was not found — this edit will fail)\n" + fallbackPreview(params);
         }
-        if (occurrences > 1 && !params.bool("replace_all").orElse(false)) {
-            return "(old_string appears " + occurrences + " times — this edit will fail without replace_all)\n" + fallbackPreview(params);
+        if (resolved.occurrences() > 1 && !params.bool("replace_all").orElse(false)) {
+            return "(old_string appears " + resolved.occurrences() + " times — this edit will fail without replace_all)\n" + fallbackPreview(params);
         }
-        return UnifiedDiffs.between(params.string("path").orElse(""), content, content.replace(oldString, newString));
+        return UnifiedDiffs.between(params.string("path").orElse(""), content, content.replace(resolved.oldString(), resolved.newString()));
     }
 
     @Override
@@ -143,15 +141,15 @@ final class EditTool implements Tool {
             return new ToolResult.Failure(failure.getMessage());
         }
 
-        final String oldString = adaptedToFile(content, stripLineNumbers(params.string("old_string").orElseThrow()));
-        final String newString = adaptedToFile(content, stripLineNumbers(params.string("new_string").orElseThrow()));
-        final int occurrences = count(content, oldString);
-        if (occurrences == 0) {
+        final Resolution resolved = resolve(content, params.string("old_string").orElseThrow(), params.string("new_string").orElseThrow());
+        final String oldString = resolved.oldString();
+        final String newString = resolved.newString();
+        if (resolved.occurrences() == 0) {
             return new ToolResult.Failure("'old_string' was not found in " + pathParam + ". Read the file and copy the text exactly, including whitespace.");
         }
         final boolean replaceAll = params.bool("replace_all").orElse(false);
-        if (occurrences > 1 && !replaceAll) {
-            return new ToolResult.Failure("'old_string' appears " + occurrences + " times in " + pathParam + ". Add surrounding context to make it unique, or set replace_all.");
+        if (resolved.occurrences() > 1 && !replaceAll) {
+            return new ToolResult.Failure("'old_string' appears " + resolved.occurrences() + " times in " + pathParam + ". Add surrounding context to make it unique, or set replace_all.");
         }
 
         final String revised = content.replace(oldString, newString);
@@ -186,6 +184,30 @@ final class EditTool implements Tool {
 
     private static int newlines(final String text) {
         return (int) text.chars().filter(c -> c == '\n').count();
+    }
+
+    /** The search and replacement strings as one resolution, shared by preview and execute so the two never disagree. */
+    private record Resolution(String oldString, String newString, int occurrences) {
+    }
+
+    /**
+     * The strings the edit actually applies. The raw old_string is tried first, so genuine
+     * digits+tab content matches as written; only when it matches nowhere is the cat-style
+     * line-number prefix from read_file stripped — and then from both strings, since the model
+     * pasted numbered output.
+     */
+    private static Resolution resolve(final String content, final String rawOld, final String rawNew) {
+        final String oldAsWritten = adaptedToFile(content, rawOld);
+        final int asWritten = count(content, oldAsWritten);
+        if (asWritten > 0) {
+            return new Resolution(oldAsWritten, adaptedToFile(content, rawNew), asWritten);
+        }
+        final String oldStripped = adaptedToFile(content, stripLineNumbers(rawOld));
+        final int stripped = count(content, oldStripped);
+        if (stripped > 0) {
+            return new Resolution(oldStripped, adaptedToFile(content, stripLineNumbers(rawNew)), stripped);
+        }
+        return new Resolution(oldAsWritten, adaptedToFile(content, rawNew), 0);
     }
 
     /**
