@@ -5,9 +5,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Remembers which files were read this session, so {@code edit} can refuse to change a file it
- * has not seen — the read-before-edit gate. Shared between {@link FilesReadPlugin}'s read tool
- * and {@link FilesEditPlugin}'s edit tool; wiring one instance into both turns the gate on.
+ * Remembers which files were read this session, so {@code edit} and {@code write_file} can
+ * refuse to change an existing file the model has not seen — the read-before-modify gate.
+ * Shared between {@link FilesReadPlugin} and {@link FilesEditPlugin}; wiring one instance into
+ * both turns the gate on. A successful write counts as a read: the model authored the content.
  */
 public final class ReadTracker {
 

@@ -68,8 +68,8 @@ class ReadBeforeEditTest {
         final ReadTracker tracker = new ReadTracker();
         final FileSystem files = new AnchoredFileSystem(project);
 
-        // When: edit is not for creation, but write_file creating a new file is unaffected by the tracker
-        final ToolResult created = new WriteFileTool(files).execute(params("{\"path\": \"new.txt\", \"content\": \"fresh\"}"), new CancelToken());
+        // When: write_file creating a NEW file passes the gate — there is nothing to have read
+        final ToolResult created = new WriteFileTool(files, tracker).execute(params("{\"path\": \"new.txt\", \"content\": \"fresh\"}"), new CancelToken());
 
         // Then
         assertThat(created).isInstanceOf(ToolResult.Success.class);
@@ -79,6 +79,47 @@ class ReadBeforeEditTest {
         final ToolResult missing = new EditTool(files, tracker).execute(params("{\"path\": \"absent.txt\", \"old_string\": \"a\", \"new_string\": \"b\"}"), new CancelToken());
         assertThat(missing).isInstanceOf(ToolResult.Failure.class);
         assertThat(missing.llmContent()).doesNotContain("read_file before editing");
+    }
+
+    @Test
+    @DisplayName("write_file refuses to overwrite an existing file that was never read")
+    void should_gate_overwriting_an_unread_file() throws IOException {
+        // Given: an existing file the model has not read
+        Files.writeString(project.resolve("config.txt"), "precious");
+        final ReadTracker tracker = new ReadTracker();
+        final FileSystem files = new AnchoredFileSystem(project);
+        final WriteFileTool write = new WriteFileTool(files, tracker);
+
+        // When
+        final ToolResult blind = write.execute(params("{\"path\": \"config.txt\", \"content\": \"clobbered\"}"), new CancelToken());
+
+        // Then: refused, content intact
+        assertThat(blind).isInstanceOf(ToolResult.Failure.class);
+        assertThat(blind.llmContent()).contains("read_file before overwriting");
+        assertThat(project.resolve("config.txt")).hasContent("precious");
+
+        // And after a read, the overwrite passes
+        new ReadFileTool(files, tracker).execute(params("{\"path\": \"config.txt\"}"), new CancelToken());
+        final ToolResult informed = write.execute(params("{\"path\": \"config.txt\", \"content\": \"revised\"}"), new CancelToken());
+        assertThat(informed).isInstanceOf(ToolResult.Success.class);
+        assertThat(project.resolve("config.txt")).hasContent("revised");
+    }
+
+    @Test
+    @DisplayName("a write counts as a read — the model can edit a file it just authored")
+    void should_allow_editing_a_file_the_model_just_wrote() {
+        // Given
+        final ReadTracker tracker = new ReadTracker();
+        final FileSystem files = new AnchoredFileSystem(project);
+
+        // When: write a new file, then edit it without an intervening read
+        new WriteFileTool(files, tracker).execute(params("{\"path\": \"fresh.txt\", \"content\": \"hello world\"}"), new CancelToken());
+        final ToolResult edited = new EditTool(files, tracker).execute(
+                params("{\"path\": \"fresh.txt\", \"old_string\": \"world\", \"new_string\": \"there\"}"), new CancelToken());
+
+        // Then: no pointless 'read it first' refusal for content the model itself wrote
+        assertThat(edited).isInstanceOf(ToolResult.Success.class);
+        assertThat(project.resolve("fresh.txt")).hasContent("hello there");
     }
 
     @Test

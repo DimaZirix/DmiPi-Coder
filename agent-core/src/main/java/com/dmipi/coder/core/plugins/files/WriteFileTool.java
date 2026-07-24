@@ -13,7 +13,12 @@ import com.dmipi.coder.core.plugin.FileSystem;
 import java.nio.file.Path;
 import java.util.Optional;
 
-/** Writes a whole file — creating it or replacing its content; the permission preview shows what would be written. */
+/**
+ * Writes a whole file — creating it or replacing its content; the permission preview shows what
+ * would be written. With a shared {@link ReadTracker}, overwriting an existing never-read file
+ * is refused (the same read-before-modify gate as {@code edit}), and a successful write marks
+ * the file read — the model just authored its entire content.
+ */
 final class WriteFileTool implements Tool {
 
     private static final int PREVIEW_CAP = 2_000;
@@ -28,9 +33,15 @@ final class WriteFileTool implements Tool {
             }""";
 
     private final FileSystem files;
+    private final ReadTracker readTracker;
 
     WriteFileTool(final FileSystem files) {
+        this(files, null);
+    }
+
+    WriteFileTool(final FileSystem files, final ReadTracker readTracker) {
         this.files = files;
+        this.readTracker = readTracker;
     }
 
     @Override
@@ -95,8 +106,14 @@ final class WriteFileTool implements Tool {
             final Path path = files.resolve(pathParam);
             final String content = params.string("content").orElseThrow();
             final boolean existed = files.exists(path);
+            if (existed && readTracker != null && !readTracker.wasRead(path)) {
+                return new ToolResult.Failure("Read " + pathParam + " with read_file before overwriting it, so you replace content you have seen.");
+            }
             final String before = existed ? files.read(path) : "";
             files.write(path, content);
+            if (readTracker != null) {
+                readTracker.markRead(path);
+            }
             final String verb = existed ? "Overwrote" : "Created and wrote to new file";
             return new ToolResult.Success(verb + " " + pathParam + " (" + content.length() + " characters).", new Display.Diff(UnifiedDiffs.between(pathParam, before, content)));
         } catch (final RuntimeException failure) {

@@ -28,6 +28,6 @@ public final class FilesEditPlugin implements Plugin {
     @Override
     public void install(final PluginRegistrar registrar, final Capabilities capabilities) {
         registrar.registerTool(new EditTool(capabilities.fileSystem(), readTracker));
-        registrar.registerTool(new WriteFileTool(capabilities.fileSystem()));
+        registrar.registerTool(new WriteFileTool(capabilities.fileSystem(), readTracker));
     }
 }
