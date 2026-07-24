@@ -23,7 +23,7 @@ final class MemoryTool implements Tool {
               "type": "object",
               "required": ["action", "scope"],
               "properties": {
-                "action": {"type": "string", "enum": ["read", "save"], "description": "read returns the scope's current memory; save replaces it."},
+                "action": {"type": "string", "enum": ["read", "save"], "description": "read returns the scope's memory file as saved on disk (@import lines unexpanded); save replaces it."},
                 "scope": {"type": "string", "enum": ["user", "project"], "description": "project for facts about this project; user for personal preferences that apply everywhere."},
                 "content": {"type": "string", "description": "On save: the complete new memory content. Read first, then save the full updated text."}
               }
@@ -42,7 +42,7 @@ final class MemoryTool implements Tool {
 
     @Override
     public String description() {
-        return "Reads or saves standing memory that carries across sessions. Save a project fact to scope 'project' and a personal preference to scope 'user'. A save replaces the scope's whole memory file: read it first, then save the complete updated content. Keep memory short — rules and pointers, not prose.";
+        return "Reads or saves standing memory that carries across sessions. Save a project fact to scope 'project' and a personal preference to scope 'user'. A save replaces the scope's whole memory file: read it first, then save the complete updated content — read returns the file exactly as saved (@import lines stay unexpanded), so the round-trip never flattens them. Keep memory short — rules and pointers, not prose.";
     }
 
     @Override
@@ -103,8 +103,11 @@ final class MemoryTool implements Tool {
     public ToolResult execute(final ToolParams params, final CancelToken cancel) {
         final MemoryScope scope = scope(params);
         if (!isSave(params)) {
+            // The raw file, not the inlined view: a read feeds the save workflow, and saving an
+            // inlined view back would bake every @import's content in and sever the link.
+            final String raw = store.rawContent(scope);
             return new ToolResult.Success(
-                    store.load(scope).orElse("(no " + scope.label() + " memory saved)"),
+                    raw.isEmpty() ? "(no " + scope.label() + " memory saved)" : raw,
                     new Display.Text("read " + scope.label() + " memory"));
         }
         final String diff = preview(params);

@@ -16,6 +16,7 @@ import com.dmipi.coder.core.domain.permissions.Mode;
 import com.dmipi.coder.core.domain.permissions.PermissionDecision;
 import com.dmipi.coder.core.domain.tool.ToolKind;
 import com.dmipi.coder.core.domain.tool.ToolParams;
+import com.dmipi.coder.core.domain.tool.ToolResult;
 import com.dmipi.coder.core.infrastructure.files.AnchoredFileSystem;
 import com.dmipi.coder.core.infrastructure.json.JacksonToolParamsParser;
 import com.dmipi.coder.core.plugin.Capabilities;
@@ -45,6 +46,30 @@ class MemoryPluginTest {
 
     private final RecordingOut out = new RecordingOut();
     private final JacksonToolParamsParser parser = new JacksonToolParamsParser(JsonMapper.builder().build());
+
+    @Test
+    @DisplayName("a read→save round-trip preserves @import lines instead of baking the imported content in")
+    void should_round_trip_imports_unflattened() throws IOException {
+        // Given: a project memory importing a rules file
+        Files.writeString(projectDirectory.resolve("CODER.md"), "Main rule.\n@rules.md");
+        Files.writeString(projectDirectory.resolve("rules.md"), "Imported rule.");
+        final MemoryStore store = new MemoryStore(
+                new AnchoredFileSystem(userDirectory), new AnchoredFileSystem(projectDirectory));
+        final MemoryTool tool = new MemoryTool(store);
+
+        // When: the designed workflow — read, append a rule, save the complete text back
+        final ToolResult read = tool.execute(parser.parse("{\"action\": \"read\", \"scope\": \"project\"}"), new CancelToken());
+        final String updated = read.llmContent() + "\nNew rule.";
+        tool.execute(parser.parse("{\"action\": \"save\", \"scope\": \"project\", \"content\": " + quoted(updated) + "}"), new CancelToken());
+
+        // Then: the read showed the file as saved, and the @import survived the round-trip
+        assertThat(read.llmContent()).contains("@rules.md").doesNotContain("Imported rule.");
+        assertThat(projectDirectory.resolve("CODER.md")).hasContent("Main rule.\n@rules.md\nNew rule.");
+    }
+
+    private static String quoted(final String text) {
+        return '"' + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + '"';
+    }
 
     @Test
     @DisplayName("loaded memory rides in the instructions: guidance, then user memory, then project memory")
