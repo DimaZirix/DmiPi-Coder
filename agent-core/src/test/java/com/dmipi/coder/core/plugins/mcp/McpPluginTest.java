@@ -1,6 +1,7 @@
 package com.dmipi.coder.core.plugins.mcp;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import com.dmipi.coder.core.api.Coder;
 import com.dmipi.coder.core.domain.agent.CancelToken;
@@ -49,6 +50,7 @@ class McpPluginTest {
     private final RecordingOut out = new RecordingOut();
     private final List<String> sessionHeadersSeen = new CopyOnWriteArrayList<>();
     private HttpServer server;
+    private volatile boolean splitSseAnswer;
 
     @BeforeEach
     void startStubMcpServer() throws IOException {
@@ -105,6 +107,50 @@ class McpPluginTest {
             assertThat(question.question()).contains("mcp__stub__mutate");
             assertThat(question.preview()).contains("\"value\":7");
         });
+    }
+
+    @Test
+    @DisplayName("an SSE reply spanning several data lines, with a string-echoed id, is still understood")
+    void should_read_a_multi_line_sse_reply() throws IOException {
+        // Given: a spec-legal server whose tools/call answer splits across data lines and echoes the id as a string
+        splitSseAnswer = true;
+        writeProjectConfig();
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "mcp__stub__lookup", "{\"query\": \"x\"}"),
+                ScriptedClient.textStep("done")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of()));
+
+        // Then: the payload was reassembled per SSE framing and matched to the request
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content()).contains("remote says: split reply"));
+    }
+
+    @Test
+    @DisplayName("a malformed MCP config fails startup naming the file — not a silent all-tools-missing session")
+    void should_fail_startup_on_a_malformed_config() throws IOException {
+        // Given
+        Files.writeString(projectDirectory.resolve(".mcp.json"), "{not json");
+
+        // When / Then
+        assertThatIllegalStateException()
+                .isThrownBy(() -> runTurn(new ScriptedClient(List.of(ScriptedClient.textStep("hi"))), new ScriptedHil(List.of())))
+                .withMessageContaining(".mcp.json");
+    }
+
+    @Test
+    @DisplayName("a non-positive timeout in the config fails startup naming the server")
+    void should_fail_startup_on_an_invalid_timeout() throws IOException {
+        // Given
+        Files.writeString(projectDirectory.resolve(".mcp.json"), """
+                {"mcpServers": {"stub": {"type": "http", "url": "%s", "timeout": -5}}}""".formatted(url()));
+
+        // When / Then
+        assertThatIllegalStateException()
+                .isThrownBy(() -> runTurn(new ScriptedClient(List.of(ScriptedClient.textStep("hi"))), new ScriptedHil(List.of())))
+                .withMessageContaining("stub")
+                .withMessageContaining("timeout");
     }
 
     @Test
@@ -191,9 +237,21 @@ class McpPluginTest {
                       {"name": "lookup", "description": "Looks something up.", "inputSchema": {"type": "object"}, "annotations": {"readOnlyHint": true}},
                       {"name": "mutate", "description": "Changes something.", "inputSchema": {"type": "object"}}
                     ]}}""".formatted(message.path("id").longValue()));
-            case "tools/call" -> respondSse(exchange, """
-                    {"jsonrpc": "2.0", "id": %d, "result": {"content": [{"type": "text", "text": "remote says: found x"}]}}"""
-                    .formatted(message.path("id").longValue()));
+            case "tools/call" -> {
+                if (splitSseAnswer) {
+                    // Spec-legal SSE: the payload spans two data lines and the id echoes back as a string.
+                    respond(exchange, "text/event-stream", """
+                            event: message
+                            data: {"jsonrpc": "2.0", "id": "%d", "result": {"content": [{"type": "text",
+                            data:  "text": "remote says: split reply"}]}}
+
+                            """.formatted(message.path("id").longValue()));
+                } else {
+                    respondSse(exchange, """
+                            {"jsonrpc": "2.0", "id": %d, "result": {"content": [{"type": "text", "text": "remote says: found x"}]}}"""
+                            .formatted(message.path("id").longValue()));
+                }
+            }
             default -> {
                 exchange.sendResponseHeaders(400, -1);
                 exchange.close();

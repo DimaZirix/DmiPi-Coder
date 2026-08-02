@@ -15,7 +15,9 @@ import tools.jackson.databind.json.JsonMapper;
  * Reads MCP server declarations: {@code .mcp.json} at the project root and
  * {@code .coder/.mcp.json} under the user directory. Only the {@code http} transport is
  * supported — a server of another type is skipped with a warning, so a shared config can carry
- * transports this agent does not speak without breaking startup. On a name clash, project wins.
+ * transports this agent does not speak without breaking startup. A malformed file or an invalid
+ * value, by contrast, fails startup loudly: a broken config is a config error, not an offline
+ * server. On a name clash, project wins.
  */
 final class McpConfigLoader {
 
@@ -43,12 +45,10 @@ final class McpConfigLoader {
         try {
             servers = MAPPER.readTree(files.read(file)).path("mcpServers");
         } catch (final JacksonException malformed) {
-            LOGGER.warning("MCP config " + file + " is not valid JSON; ignoring it: " + malformed.getMessage());
-            return;
+            throw new IllegalStateException("MCP config " + file + " is not valid JSON — fix or remove it: " + malformed.getMessage(), malformed);
         }
         if (!servers.isObject()) {
-            LOGGER.warning("MCP config " + file + " has no 'mcpServers' object; ignoring it.");
-            return;
+            throw new IllegalStateException("MCP config " + file + " has no 'mcpServers' object; declare servers under that key, or remove the file.");
         }
         for (final String name : servers.propertyNames()) {
             final McpServerConfig server = server(name, servers.path(name), file);
@@ -69,9 +69,10 @@ final class McpConfigLoader {
             LOGGER.warning("MCP server '" + name + "' in " + file + " has no 'url'; skipping it.");
             return null;
         }
-        final Duration timeout = declaration.path("timeout").isIntegralNumber()
-                ? Duration.ofMillis(declaration.path("timeout").longValue())
-                : DEFAULT_REQUEST_TIMEOUT;
-        return new McpServerConfig(name, url.stringValue(), timeout);
+        final JsonNode timeout = declaration.path("timeout");
+        if (!timeout.isMissingNode() && (!timeout.isIntegralNumber() || timeout.longValue() <= 0)) {
+            throw new IllegalStateException("MCP server '" + name + "' in " + file + " has an invalid 'timeout' (" + timeout + "); use positive milliseconds.");
+        }
+        return new McpServerConfig(name, url.stringValue(), timeout.isIntegralNumber() ? Duration.ofMillis(timeout.longValue()) : DEFAULT_REQUEST_TIMEOUT);
     }
 }

@@ -153,20 +153,59 @@ final class McpClient {
         return exchange;
     }
 
-    /** The JSON-RPC reply carrying the given id — direct JSON, or dug out of the SSE data events. */
+    /**
+     * The JSON-RPC reply carrying the given id — direct JSON, or dug out of the SSE events.
+     * SSE framing per spec: an event's payload is every consecutive {@code data:} line joined
+     * with newlines, terminated by a blank line — a large reply may span several data lines.
+     */
     private JsonNode replyWithId(final Http.Exchange exchange, final long id) {
         if (!exchange.contentType().contains("text/event-stream")) {
             return MAPPER.readTree(exchange.body());
         }
-        for (final String line : exchange.body().split("\n")) {
-            if (!line.startsWith("data:")) {
+        final StringBuilder data = new StringBuilder();
+        for (final String raw : exchange.body().split("\n", -1)) {
+            final String line = raw.endsWith("\r") ? raw.substring(0, raw.length() - 1) : raw;
+            if (line.startsWith("data:")) {
+                if (!data.isEmpty()) {
+                    data.append('\n');
+                }
+                data.append(line.substring("data:".length() + (line.startsWith("data: ") ? 1 : 0)));
                 continue;
             }
-            final JsonNode message = MAPPER.readTree(line.substring("data:".length()).strip());
-            if (message.path("id").isIntegralNumber() && message.path("id").longValue() == id) {
-                return message;
+            if (line.isEmpty() && !data.isEmpty()) {
+                final JsonNode reply = eventWithId(data.toString(), id);
+                data.setLength(0);
+                if (reply != null) {
+                    return reply;
+                }
+            }
+        }
+        if (!data.isEmpty()) {
+            final JsonNode reply = eventWithId(data.toString(), id);
+            if (reply != null) {
+                return reply;
             }
         }
         throw new IllegalStateException("MCP server '" + server.name() + "' closed the SSE stream without answering request " + id + ".");
+    }
+
+    /** The event parsed as the awaited reply, or null when it is another message (or not JSON at all). */
+    private static JsonNode eventWithId(final String payload, final long id) {
+        final JsonNode message;
+        try {
+            message = MAPPER.readTree(payload);
+        } catch (final RuntimeException notJson) {
+            // A foreign, non-JSON event on the stream is not ours to reject; the awaited reply is still searched for.
+            return null;
+        }
+        return matchesId(message.path("id"), id) ? message : null;
+    }
+
+    /** JSON-RPC requires the id echoed back with the same value; a server answering with its string form is accepted too. */
+    private static boolean matchesId(final JsonNode id, final long expected) {
+        if (id.isIntegralNumber()) {
+            return id.longValue() == expected;
+        }
+        return id.isString() && id.stringValue().equals(Long.toString(expected));
     }
 }
