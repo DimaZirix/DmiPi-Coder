@@ -1,6 +1,7 @@
 package com.dmipi.coder.core.plugins.claudeplugins;
 
 import com.dmipi.coder.core.plugin.FileSystem;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -58,6 +59,12 @@ final class ClaudePluginInstaller {
         final Map<String, String> skillFiles = hasSkills ? readSkillFiles(pluginRoot) : Map.of();
 
         final List<String> skills = skillNames(skillFiles.keySet());
+        final List<String> serverNames = incomingServers != null ? List.copyOf(incomingServers.propertyNames()) : List.of();
+        failOnForeignOwnership(name, skills, serverNames);
+        // A reinstall clears the previous version's recorded content first, so a skill the new
+        // version dropped does not linger as an unowned orphan.
+        InstalledPluginsRegistry.find(destination, name)
+                .ifPresent(previous -> InstalledContent.remove(previous, destination, scope));
         for (final Map.Entry<String, String> file : skillFiles.entrySet()) {
             destination.write(destination.resolve(SKILLS_LOCATION + "/" + file.getKey()), file.getValue());
         }
@@ -82,6 +89,25 @@ final class ClaudePluginInstaller {
                 .filter(file -> SKILL_FILE.matcher(file).matches())
                 .map(file -> file.substring(0, file.indexOf('/')))
                 .toList();
+    }
+
+    /** Refuses to install content whose name another plugin in this scope already owns — its removal would gut that plugin. */
+    private void failOnForeignOwnership(final String name, final List<String> skills, final List<String> servers) {
+        final List<String> conflicts = new ArrayList<>();
+        for (final InstalledPlugin other : InstalledPluginsRegistry.all(destination)) {
+            if (other.name().equals(name)) {
+                continue;
+            }
+            skills.stream()
+                    .filter(other.skills()::contains)
+                    .forEach(skill -> conflicts.add("skill '" + skill + "' belongs to plugin '" + other.name() + "'"));
+            servers.stream()
+                    .filter(other.mcpServers()::contains)
+                    .forEach(server -> conflicts.add("MCP server '" + server + "' belongs to plugin '" + other.name() + "'"));
+        }
+        if (!conflicts.isEmpty()) {
+            throw new InstallFailure("Installing would overwrite content another plugin owns: " + String.join("; ", conflicts) + ". Remove that plugin first.");
+        }
     }
 
     private List<String> skippedContent(final String pluginRoot) {

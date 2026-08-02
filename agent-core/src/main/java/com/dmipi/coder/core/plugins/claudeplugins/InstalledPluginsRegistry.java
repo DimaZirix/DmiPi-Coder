@@ -66,21 +66,40 @@ final class InstalledPluginsRegistry {
     private static InstalledPlugin entry(final String name, final JsonNode node) {
         return new InstalledPlugin(
                 name,
-                text(node.path("source")),
-                strings(node.path("skills")),
-                strings(node.path("mcpServers")));
+                source(name, node.path("source")),
+                names(name, "skills", node.path("skills")),
+                names(name, "mcpServers", node.path("mcpServers")));
     }
 
-    private static List<String> strings(final JsonNode array) {
+    private static String source(final String plugin, final JsonNode node) {
+        if (node.isMissingNode()) {
+            return "";
+        }
+        if (!node.isString()) {
+            throw new InstallFailure("The plugin manifest " + LOCATION + " entry '" + plugin + "' has a non-text 'source' (" + node + "); fix the file before continuing.");
+        }
+        return node.stringValue();
+    }
+
+    /**
+     * The entry's recorded names, each verified to be a non-blank string — these names become
+     * deletion targets on removal, so a malformed one must fail loudly, never default to "".
+     */
+    private static List<String> names(final String plugin, final String field, final JsonNode array) {
+        if (array.isMissingNode()) {
+            return List.of();
+        }
+        if (!array.isArray()) {
+            throw new InstallFailure("The plugin manifest " + LOCATION + " entry '" + plugin + "' has a non-array '" + field + "' (" + array + "); fix the file before continuing.");
+        }
         final List<String> values = new ArrayList<>();
         for (final JsonNode value : array) {
-            values.add(text(value));
+            if (!value.isString() || value.stringValue().isBlank()) {
+                throw new InstallFailure("The plugin manifest " + LOCATION + " entry '" + plugin + "' has an invalid name in '" + field + "' (" + value + "); fix the file before continuing.");
+            }
+            values.add(value.stringValue());
         }
         return values;
-    }
-
-    private static String text(final JsonNode node) {
-        return node.isString() ? node.stringValue() : "";
     }
 
     private static void names(final ArrayNode array, final List<String> values) {

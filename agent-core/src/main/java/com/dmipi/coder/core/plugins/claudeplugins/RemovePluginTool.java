@@ -37,8 +37,6 @@ final class RemovePluginTool implements Tool {
               }
             }""";
 
-    private static final String SKILLS_LOCATION = ".coder/skills";
-
     private final FileSystem projectFiles;
     private final FileSystem userFiles;
     private final Hil hil;
@@ -107,7 +105,7 @@ final class RemovePluginTool implements Tool {
             final FileSystem files = scope == InstallScope.USER ? userFiles : projectFiles;
             final InstalledPlugin plugin = InstalledPluginsRegistry.find(files, name)
                     .orElseThrow(() -> new InstallFailure("No plugin named '" + name + "' is installed in the " + scope.label() + " scope. " + installed()));
-            remove(plugin, files, scope);
+            InstalledContent.remove(plugin, files, scope);
             return new ToolResult.Success(report(plugin, scope), new Display.Text("removed " + name + " (" + scope.label() + " scope)"));
         } catch (final InstallFailure failure) {
             return new ToolResult.Failure(failure.getMessage());
@@ -140,12 +138,6 @@ final class RemovePluginTool implements Tool {
                         new Option(InstallScope.PROJECT.label(), "Project space", "this project only"))));
         return InstallScope.of(answer.selected().getFirst())
                 .orElseThrow(() -> new InstallFailure("The scope answer '" + answer.selected().getFirst() + "' matches no scope; valid values: " + InstallScope.validValues() + "."));
-    }
-
-    private static void remove(final InstalledPlugin plugin, final FileSystem files, final InstallScope scope) {
-        plugin.skills().forEach(skill -> files.delete(files.resolve(SKILLS_LOCATION + "/" + skill)));
-        McpServersConfig.remove(plugin.mcpServers(), files, scope.mcpConfigLocation());
-        InstalledPluginsRegistry.remove(files, plugin.name());
     }
 
     private String installed() {

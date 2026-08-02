@@ -303,6 +303,77 @@ class ClaudePluginInstallerPluginTest {
     }
 
     @Test
+    @DisplayName("a reinstall clears the previous version's content — a dropped skill does not linger")
+    void should_clear_stale_content_on_reinstall() throws IOException {
+        // Given: v1 ships two skills; v2 of the same plugin ships only one
+        write(marketplace.resolve("skills/old-skill/SKILL.md"), "---\nname: old-skill\ndescription: Old.\n---\nv1");
+        write(marketplace.resolve("skills/prompt-engineer/SKILL.md"), SKILL);
+        final ScriptedClient install = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", """
+                        {"source": "%s", "scope": "project"}""".formatted(marketplace)),
+                ScriptedClient.textStep("ok")));
+        runTurn(install, new ScriptedHil(List.of(Answer.of("allow-once"))));
+        Files.delete(marketplace.resolve("skills/old-skill/SKILL.md"));
+        Files.delete(marketplace.resolve("skills/old-skill"));
+
+        // When: the same source installs again
+        final ScriptedClient reinstall = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c2", "install_plugin", """
+                        {"source": "%s", "scope": "project"}""".formatted(marketplace)),
+                ScriptedClient.textStep("ok")));
+        runTurn(reinstall, new ScriptedHil(List.of(Answer.of("allow-once"))));
+
+        // Then: the dropped skill is gone, the surviving one is present and owned
+        assertThat(projectDirectory.resolve(".coder/skills/old-skill")).doesNotExist();
+        assertThat(projectDirectory.resolve(".coder/skills/prompt-engineer/SKILL.md")).exists();
+        assertThat(Files.readString(projectDirectory.resolve(".coder/installed-plugins.json")))
+                .contains("prompt-engineer")
+                .doesNotContain("old-skill");
+    }
+
+    @Test
+    @DisplayName("installing content another plugin owns is refused, naming the owner")
+    void should_refuse_to_overwrite_another_plugins_content() throws IOException {
+        // Given: plugin A owns skill 'shared'; plugin B ships a skill of the same name
+        write(marketplace.resolve("plugin-a/skills/shared/SKILL.md"), "---\nname: shared\ndescription: A's.\n---\nfrom A");
+        write(marketplace.resolve("plugin-b/skills/shared/SKILL.md"), "---\nname: shared\ndescription: B's.\n---\nfrom B");
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", """
+                        {"source": "%s", "plugin": "plugin-a", "scope": "project"}""".formatted(marketplace)),
+                ScriptedClient.toolCallStep("c2", "install_plugin", """
+                        {"source": "%s", "plugin": "plugin-b", "scope": "project"}""".formatted(marketplace)),
+                ScriptedClient.textStep("ok")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"), Answer.of("allow-once"))));
+
+        // Then: B was refused naming A, and A's file is untouched
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content()).contains("skill 'shared' belongs to plugin 'plugin-a'"));
+        assertThat(projectDirectory.resolve(".coder/skills/shared/SKILL.md")).content().contains("from A");
+    }
+
+    @Test
+    @DisplayName("a malformed manifest entry fails removal loudly — it never becomes a wildcard delete")
+    void should_refuse_removal_on_a_malformed_manifest() throws IOException {
+        // Given: a hand-broken manifest whose skill name is a number, next to an innocent skill
+        write(projectDirectory.resolve(".coder/installed-plugins.json"),
+                "{\"plugins\": {\"broken\": {\"source\": \"x\", \"skills\": [1], \"mcpServers\": []}}}");
+        write(projectDirectory.resolve(".coder/skills/innocent/SKILL.md"), "keep me");
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "remove_plugin", "{\"name\": \"broken\", \"scope\": \"project\"}"),
+                ScriptedClient.textStep("ok")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+
+        // Then: refused naming the manifest, and nothing was deleted
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content()).contains("installed-plugins.json").contains("invalid name"));
+        assertThat(projectDirectory.resolve(".coder/skills/innocent/SKILL.md")).exists();
+    }
+
+    @Test
     @DisplayName("removing a plugin that is not installed fails naming the installed ones")
     void should_refuse_to_remove_an_unknown_plugin() throws IOException {
         // Given: one installed plugin, and an attempt to remove another
