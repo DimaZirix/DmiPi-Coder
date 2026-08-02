@@ -16,7 +16,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * The core's shell capability. Owns the containment policy (the {@link SandboxSpec}) and clamps
  * every requested timeout to the configured maximum; the mechanism comes from the configured
  * {@link SandboxProvider}. The sandbox is built lazily on first use, so a session that never
- * runs a command allocates nothing, and torn down at {@link #close}.
+ * runs a command allocates nothing, and torn down at {@link #close} — after which further
+ * commands are refused rather than silently resurrecting an untracked sandbox.
  */
 public final class SessionShell implements Shell, AutoCloseable {
 
@@ -24,7 +25,9 @@ public final class SessionShell implements Shell, AutoCloseable {
     private final SandboxSpec spec;
     private final List<Process> backgroundProcesses = new CopyOnWriteArrayList<>();
     private final AtomicInteger backgroundCounter = new AtomicInteger();
-    private volatile Sandbox sandbox;
+    // Guarded by this: sandbox lifecycle — lazily built, torn down once, never rebuilt after close.
+    private Sandbox sandbox;
+    private boolean closed;
 
     public SessionShell(final SandboxProvider provider, final SandboxSpec spec) {
         this.provider = provider;
@@ -47,7 +50,8 @@ public final class SessionShell implements Shell, AutoCloseable {
     }
 
     @Override
-    public String runInBackground(final String command) {
+    public synchronized String runInBackground(final String command) {
+        // Synchronized with close(): a background process either registers before the kill loop or is refused.
         final Process process = sandbox().startBackground(command);
         backgroundProcesses.add(process);
         return "bg-" + backgroundCounter.incrementAndGet();
@@ -58,27 +62,24 @@ public final class SessionShell implements Shell, AutoCloseable {
         return timeout.compareTo(spec.maxTimeout()) > 0 ? spec.maxTimeout() : timeout;
     }
 
-    private Sandbox sandbox() {
-        Sandbox current = sandbox;
-        if (current == null) {
-            synchronized (this) {
-                current = sandbox;
-                if (current == null) {
-                    current = provider.create(spec);
-                    sandbox = current;
-                }
-            }
+    private synchronized Sandbox sandbox() {
+        if (closed) {
+            throw new IllegalStateException("The session shell is closed; no further commands can run.");
         }
-        return current;
+        if (sandbox == null) {
+            sandbox = provider.create(spec);
+        }
+        return sandbox;
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
+        closed = true;
         backgroundProcesses.forEach(ProcessRunner::killProcessTree);
         backgroundProcesses.clear();
-        final Sandbox current = sandbox;
-        if (current != null) {
-            current.close();
+        if (sandbox != null) {
+            sandbox.close();
+            sandbox = null;
         }
     }
 }
