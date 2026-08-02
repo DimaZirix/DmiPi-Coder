@@ -31,6 +31,38 @@ class SessionStoreTest {
     private Path projectDirectory;
 
     @Test
+    @DisplayName("a corrupted session file fails to load with a message naming the file, not a raw parser error")
+    void should_translate_a_corrupted_session_file() throws java.io.IOException {
+        // Given: a truncated save, as a crash mid-write would have left before atomic moves
+        final Path sessions = projectDirectory.resolve("sessions");
+        java.nio.file.Files.createDirectories(sessions);
+        java.nio.file.Files.writeString(sessions.resolve("broken.json"), "{\"fingerprint\": \"x\", \"messages\": [{\"role\": \"USER\"");
+
+        // When / Then
+        assertThatIllegalStateException()
+                .isThrownBy(() -> new SessionStore(sessions).load("broken"))
+                .withMessageContaining("broken.json")
+                .withMessageContaining("corrupted");
+    }
+
+    @Test
+    @DisplayName("a re-save replaces the previous file through a staging file that never lingers")
+    void should_save_through_a_staging_file() {
+        // Given
+        final Path sessions = projectDirectory.resolve("sessions");
+        final SessionStore store = new SessionStore(sessions);
+
+        // When: two saves under the same name
+        store.save("work", "prompt", "fp1", List.of());
+        store.save("work", "prompt", "fp2", List.of());
+
+        // Then: one session listed, latest content, no .tmp leftovers
+        assertThat(store.list()).containsExactly("work");
+        assertThat(store.load("work").fingerprint()).isEqualTo("fp2");
+        assertThat(sessions.toFile().list()).containsExactly("work.json");
+    }
+
+    @Test
     @DisplayName("a saved session resumes in a new process: same dialogue, fresh instructions, model continues in context")
     void should_save_and_resume_a_conversation() {
         // Given: a first process talks, saves, and closes

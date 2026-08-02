@@ -5,8 +5,10 @@ import com.dmipi.coder.core.domain.llm.Role;
 import com.dmipi.coder.core.domain.llm.ToolCall;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -63,9 +65,22 @@ public final class SessionStore {
                 .forEach(message -> dialogue.add(node(message)));
         try {
             Files.createDirectories(directory);
-            Files.writeString(file(name), MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(root));
+            // Write-then-move: a crash mid-write must never truncate the previous good save.
+            final Path target = file(name);
+            final Path staging = directory.resolve(name + ".json.tmp");
+            Files.writeString(staging, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(root));
+            move(staging, target);
         } catch (final IOException failure) {
             throw new UncheckedIOException("Could not save the session '" + name + "': " + failure.getMessage(), failure);
+        }
+    }
+
+    private static void move(final Path staging, final Path target) throws IOException {
+        try {
+            Files.move(staging, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (final AtomicMoveNotSupportedException unsupported) {
+            // A filesystem without atomic moves still gets the write-then-move ordering.
+            Files.move(staging, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
@@ -74,15 +89,21 @@ public final class SessionStore {
         if (!Files.isRegularFile(file)) {
             throw new IllegalArgumentException("No saved session named '" + name + "'. Saved: " + String.join(", ", list()) + ".");
         }
+        final String json;
         try {
-            final JsonNode root = MAPPER.readTree(Files.readString(file));
+            json = Files.readString(file);
+        } catch (final IOException failure) {
+            throw new UncheckedIOException("Could not read the session '" + name + "': " + failure.getMessage(), failure);
+        }
+        try {
+            final JsonNode root = MAPPER.readTree(json);
             final List<ChatMessage> messages = new ArrayList<>();
             for (final JsonNode node : root.path("messages")) {
                 messages.add(message(node));
             }
             return new SavedSession(root.path("systemPrompt").asString(""), root.path("fingerprint").asString(""), List.copyOf(messages));
-        } catch (final IOException failure) {
-            throw new UncheckedIOException("Could not read the session '" + name + "': " + failure.getMessage(), failure);
+        } catch (final RuntimeException corrupted) {
+            throw new IllegalStateException("The session file " + file + " is corrupted and cannot be resumed: " + corrupted.getMessage(), corrupted);
         }
     }
 
