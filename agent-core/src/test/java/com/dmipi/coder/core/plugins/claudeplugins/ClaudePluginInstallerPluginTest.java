@@ -188,6 +188,48 @@ class ClaudePluginInstallerPluginTest {
     }
 
     @Test
+    @DisplayName("a binary skill file fails the install loudly — nothing is written corrupted")
+    void should_refuse_a_binary_skill_file() throws IOException {
+        // Given: a skill carrying a binary asset the text copy would mangle
+        write(marketplace.resolve("skills/prompt-engineer/SKILL.md"), SKILL);
+        Files.write(marketplace.resolve("skills/prompt-engineer/logo.png"), new byte[] {(byte) 0x89, 'P', 'N', 'G', (byte) 0xFF, (byte) 0xFE, 0x00, 0x1F});
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", """
+                        {"source": "%s", "scope": "project"}""".formatted(marketplace)),
+                ScriptedClient.textStep("ok")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+
+        // Then: the failure names the file, and no partial content landed anywhere
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content()).contains("logo.png").contains("not plain UTF-8 text"));
+        assertThat(projectDirectory.resolve(".coder/skills")).doesNotExist();
+        assertThat(projectDirectory.resolve(".coder/installed-plugins.json")).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("a malformed .mcp.json fails the install before any skill was copied")
+    void should_validate_the_mcp_config_before_copying_anything() throws IOException {
+        // Given: a valid skill next to a broken MCP config
+        write(marketplace.resolve("skills/prompt-engineer/SKILL.md"), SKILL);
+        write(marketplace.resolve(".mcp.json"), "{not json at all");
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", """
+                        {"source": "%s", "scope": "project"}""".formatted(marketplace)),
+                ScriptedClient.textStep("ok")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+
+        // Then: no orphaned skills invisible to remove_plugin, no manifest entry
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content()).contains(".mcp.json"));
+        assertThat(projectDirectory.resolve(".coder/skills")).doesNotExist();
+        assertThat(projectDirectory.resolve(".coder/installed-plugins.json")).doesNotExist();
+    }
+
+    @Test
     @DisplayName("list_plugins reports each installed plugin with its scope, skills, and servers")
     void should_list_installed_plugins() throws IOException {
         // Given: a plugin installed to the project, then listed

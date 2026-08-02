@@ -23,12 +23,20 @@ final class McpServersConfig {
     private McpServersConfig() {
     }
 
-    /** Merges every server into the config at {@code location}, returning the merged names. */
-    static List<String> merge(final String pluginConfig, final FileSystem destination, final String location) {
-        final JsonNode incoming = parse(pluginConfig, "the plugin's .mcp.json").path(SERVERS_FIELD);
-        if (!incoming.isObject()) {
+    /**
+     * The validated {@code mcpServers} object of a plugin's config — parsed up front so a
+     * malformed config fails the install before anything was copied.
+     */
+    static ObjectNode incomingServers(final String pluginConfig) {
+        final JsonNode servers = parse(pluginConfig, "the plugin's .mcp.json").path(SERVERS_FIELD);
+        if (!servers.isObject()) {
             throw new InstallFailure("The plugin's .mcp.json has no '" + SERVERS_FIELD + "' object — nothing to install.");
         }
+        return (ObjectNode) servers;
+    }
+
+    /** Merges every server into the config at {@code location}, returning the merged names. */
+    static List<String> merge(final ObjectNode incoming, final FileSystem destination, final String location) {
         final Path file = destination.resolve(location);
         final ObjectNode root = existingConfig(destination, file, location);
         final ObjectNode servers = serversOf(root);

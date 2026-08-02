@@ -1,10 +1,14 @@
 package com.dmipi.coder.core.plugins.claudeplugins;
 
 import com.dmipi.coder.core.plugin.FileSystem;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.regex.Pattern;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Converts one Claude-format plugin into the native layout: every file under
@@ -46,26 +50,38 @@ final class ClaudePluginInstaller {
                     ? "Plugin '" + pluginRoot + "' has neither a " + SKILLS_DIRECTORY + " directory nor an " + MCP_CONFIG + " — nothing supported to install."
                     : "The source root has no " + SKILLS_DIRECTORY + " directory and no " + MCP_CONFIG + " — pass 'plugin' to pick one from a marketplace. " + availablePlugins());
         }
-        final List<String> skills = hasSkills ? installSkills(pluginRoot) : List.of();
-        final List<String> servers = hasServers ? installServers(pluginRoot) : List.of();
+        // Read and validate everything before writing anything: a malformed .mcp.json or a
+        // non-text skill file fails the install with no partial content left behind.
+        final ObjectNode incomingServers = hasServers
+                ? McpServersConfig.incomingServers(source.read(join(pluginRoot, MCP_CONFIG)))
+                : null;
+        final Map<String, String> skillFiles = hasSkills ? readSkillFiles(pluginRoot) : Map.of();
+
+        final List<String> skills = skillNames(skillFiles.keySet());
+        for (final Map.Entry<String, String> file : skillFiles.entrySet()) {
+            destination.write(destination.resolve(SKILLS_LOCATION + "/" + file.getKey()), file.getValue());
+        }
+        final List<String> servers = incomingServers != null
+                ? McpServersConfig.merge(incomingServers, destination, scope.mcpConfigLocation())
+                : List.of();
         InstalledPluginsRegistry.record(destination, new InstalledPlugin(name, origin, skills, servers));
         return report(name, skills, servers, skippedContent(pluginRoot));
     }
 
-    private List<String> installSkills(final String pluginRoot) {
+    private Map<String, String> readSkillFiles(final String pluginRoot) {
         final String skillsRoot = join(pluginRoot, SKILLS_DIRECTORY);
-        final List<String> files = source.filesUnder(skillsRoot);
-        for (final String file : files) {
-            destination.write(destination.resolve(SKILLS_LOCATION + "/" + file), source.read(skillsRoot + "/" + file));
+        final Map<String, String> contents = new LinkedHashMap<>();
+        for (final String file : source.filesUnder(skillsRoot)) {
+            contents.put(file, source.read(skillsRoot + "/" + file));
         }
+        return contents;
+    }
+
+    private static List<String> skillNames(final Collection<String> files) {
         return files.stream()
                 .filter(file -> SKILL_FILE.matcher(file).matches())
                 .map(file -> file.substring(0, file.indexOf('/')))
                 .toList();
-    }
-
-    private List<String> installServers(final String pluginRoot) {
-        return McpServersConfig.merge(source.read(join(pluginRoot, MCP_CONFIG)), destination, scope.mcpConfigLocation());
     }
 
     private List<String> skippedContent(final String pluginRoot) {

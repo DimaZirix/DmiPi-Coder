@@ -3,6 +3,7 @@ package com.dmipi.coder.core.plugins.claudeplugins;
 import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.shell.ShellResult;
 import com.dmipi.coder.core.plugin.Shell;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -61,12 +62,36 @@ final class PluginSource implements AutoCloseable {
         return shell.run("test -f " + quote(path(relative)), cancel).succeeded();
     }
 
+    /**
+     * The file's content, verified byte-for-byte against its on-disk size — the shell capture
+     * decodes UTF-8 and caps its length, so a binary or oversized file would otherwise install
+     * silently corrupted.
+     */
     String read(final String relative) {
-        final ShellResult result = shell.run("cat -- " + quote(path(relative)), cancel);
+        final String file = path(relative);
+        final ShellResult result = shell.run("cat -- " + quote(file), cancel);
         if (!result.succeeded()) {
-            throw new InstallFailure("Could not read '" + path(relative) + "' from the source: " + result.stderr().strip());
+            throw new InstallFailure("Could not read '" + file + "' from the source: " + result.stderr().strip());
+        }
+        final long captured = result.stdout().getBytes(StandardCharsets.UTF_8).length;
+        final long onDisk = sizeOf(file);
+        if (captured != onDisk) {
+            throw new InstallFailure("The file '" + file + "' is not plain UTF-8 text within the copy limit ("
+                    + onDisk + " bytes on disk, " + captured + " captured) — only text skill files can be installed.");
         }
         return result.stdout();
+    }
+
+    private long sizeOf(final String file) {
+        final ShellResult size = shell.run("wc -c < " + quote(file), cancel);
+        if (!size.succeeded()) {
+            throw new InstallFailure("Could not measure '" + file + "' in the source: " + size.stderr().strip());
+        }
+        try {
+            return Long.parseLong(size.stdout().strip());
+        } catch (final NumberFormatException unexpected) {
+            throw new InstallFailure("Could not measure '" + file + "' in the source: wc reported '" + size.stdout().strip() + "'.");
+        }
     }
 
     /** Every regular file under the given directory, as sorted paths relative to it. */
@@ -78,9 +103,13 @@ final class PluginSource implements AutoCloseable {
         }
         return result.stdout()
                 .lines()
-                .map(String::strip)
-                .filter(line -> line.startsWith(directory + "/"))
-                .map(line -> line.substring(directory.length() + 1))
+                .filter(line -> !line.isBlank())
+                .map(line -> {
+                    if (!line.startsWith(directory + "/")) {
+                        throw new InstallFailure("Unsupported file name in the source (a line break in a path?): '" + line + "'.");
+                    }
+                    return line.substring(directory.length() + 1);
+                })
                 .sorted()
                 .toList();
     }
