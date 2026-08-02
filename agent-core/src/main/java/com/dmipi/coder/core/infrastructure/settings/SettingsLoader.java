@@ -91,16 +91,16 @@ public final class SettingsLoader {
             final ModelOptions defaults = ModelOptions.defaults();
             final ModelOptions options = new ModelOptions(
                     text(model, "promptStyle").map(value -> parsed(value, PromptStyle.class, file)).orElse(defaults.promptStyle()),
-                    model.path("idleTimeoutSeconds").isIntegralNumber() ? model.path("idleTimeoutSeconds").asInt() : defaults.idleTimeoutSeconds(),
+                    integer(model, "idleTimeoutSeconds", defaults.idleTimeoutSeconds(), file),
                     text(model, "apiKeyEnv"),
-                    model.path("thinking").asBoolean(defaults.thinking()),
+                    bool(model, "thinking", defaults.thinking(), file),
                     text(model, "structuredOutput").map(value -> parsed(value, StructuredOutput.class, file)).orElse(defaults.structuredOutput()));
             return new ModelDeclaration(
                     text(model, "name").orElse(""),
                     text(model, "protocol").orElse(""),
                     text(model, "endpoint").orElse(""),
                     parsed(text(model, "tier").orElse(""), Tier.class, file),
-                    model.path("contextWindow").asInt(0),
+                    integer(model, "contextWindow", 0, file),
                     options);
         } catch (final IllegalArgumentException invalid) {
             throw new IllegalStateException("Invalid model declaration in " + file + ": " + invalid.getMessage());
@@ -118,6 +118,29 @@ public final class SettingsLoader {
     private static Optional<String> text(final JsonNode node, final String key) {
         final JsonNode value = node.path(key);
         return value.isString() && !value.stringValue().isBlank() ? Optional.of(value.stringValue()) : Optional.empty();
+    }
+
+    /** A value of the wrong shape throws — a mistyped setting must never silently become the default. */
+    private static int integer(final JsonNode node, final String key, final int fallback, final Path file) {
+        final JsonNode value = node.path(key);
+        if (value.isMissingNode()) {
+            return fallback;
+        }
+        if (!value.isIntegralNumber() || value.longValue() < 0) {
+            throw new IllegalStateException("The settings file " + file + " needs a non-negative integer for '" + key + "', got " + value + ".");
+        }
+        return value.intValue();
+    }
+
+    private static boolean bool(final JsonNode node, final String key, final boolean fallback, final Path file) {
+        final JsonNode value = node.path(key);
+        if (value.isMissingNode()) {
+            return fallback;
+        }
+        if (!value.isBoolean()) {
+            throw new IllegalStateException("The settings file " + file + " needs true or false for '" + key + "', got " + value + ".");
+        }
+        return value.booleanValue();
     }
 
     private static Optional<Duration> seconds(final JsonNode node, final String key, final Path file) {

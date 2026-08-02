@@ -107,6 +107,29 @@ class SettingsLoaderTest {
     }
 
     @Test
+    @DisplayName("a mistyped model value fails naming the key instead of silently taking the default")
+    void should_refuse_mistyped_model_values() throws IOException {
+        // Given / When / Then: the string "900", the string "yes", and a quoted contextWindow each fail namely
+        writeSettings(userDirectory, """
+                {"models": [{"name": "m", "protocol": "p", "endpoint": "e", "tier": "fast", "contextWindow": 8000, "idleTimeoutSeconds": "900"}]}""");
+        assertThatIllegalStateException()
+                .isThrownBy(() -> SettingsLoader.load(userDirectory))
+                .withMessageContaining("idleTimeoutSeconds");
+
+        writeSettings(userDirectory, """
+                {"models": [{"name": "m", "protocol": "p", "endpoint": "e", "tier": "fast", "contextWindow": 8000, "thinking": "yes"}]}""");
+        assertThatIllegalStateException()
+                .isThrownBy(() -> SettingsLoader.load(userDirectory))
+                .withMessageContaining("thinking");
+
+        writeSettings(userDirectory, """
+                {"models": [{"name": "m", "protocol": "p", "endpoint": "e", "tier": "fast", "contextWindow": "32000"}]}""");
+        assertThatIllegalStateException()
+                .isThrownBy(() -> SettingsLoader.load(userDirectory))
+                .withMessageContaining("contextWindow");
+    }
+
+    @Test
     @DisplayName("overriding a declared model keeps its position — the active model does not silently change")
     void should_keep_the_active_model_when_settings_override_it() throws IOException {
         // Given: the builder declares [primary, fallback]; settings override primary's endpoint
