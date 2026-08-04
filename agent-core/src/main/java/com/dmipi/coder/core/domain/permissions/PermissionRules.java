@@ -6,9 +6,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * The operator's allow/ask/deny rules for a call. Deny wins over allow wins over ask among the
- * matching rules — the strictest intent an operator expressed for a call is the one that holds.
- * No rule matches → empty, and the gate falls through to baselines and the mode.
+ * The operator's allow/ask/deny rules for a call. Among the matching rules the strictest
+ * decision holds: deny wins over ask wins over allow — a broad ask rule is not silenced by a
+ * narrower allow, and an explicit deny beats both. No rule matches → empty, and the gate falls
+ * through to baselines and the mode.
  */
 public final class PermissionRules {
 

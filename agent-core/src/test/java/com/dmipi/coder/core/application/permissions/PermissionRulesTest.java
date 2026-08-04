@@ -86,6 +86,18 @@ class PermissionRulesTest {
     }
 
     @Test
+    @DisplayName("ask wins over allow when both rules match — the strictest matching intent holds")
+    void should_prefer_ask_over_allow() {
+        // Given: a broad ask-everything rule and a narrower allow
+        final PermissionRules rules = new PermissionRules(List.of(
+                new PermissionRule("*", "", PermissionDecision.ASK),
+                new PermissionRule("run_shell_command", "git status*", PermissionDecision.ALLOW)));
+
+        // When / Then
+        assertThat(rules.decisionFor(shell, params("git status --short"))).contains(PermissionDecision.ASK);
+    }
+
+    @Test
     @DisplayName("deny wins over allow when both rules match")
     void should_prefer_deny_over_allow() {
         // Given: an allow-all rule and a specific deny
