@@ -12,28 +12,36 @@ import java.io.PrintWriter;
  */
 public final class ConsoleRenderer implements Out {
 
+    /** Whether the writer's cursor sits mid-line — shared across derived renderers, since they share the writer. */
+    private static final class LineState {
+
+        private boolean midLine;
+    }
+
     private final PrintWriter writer;
     private final boolean showThinking;
     private final String linePrefix;
+    private final LineState state;
 
     public ConsoleRenderer(final PrintWriter writer) {
-        this(writer, false, "");
+        this(writer, false, "", new LineState());
     }
 
-    private ConsoleRenderer(final PrintWriter writer, final boolean showThinking, final String linePrefix) {
+    private ConsoleRenderer(final PrintWriter writer, final boolean showThinking, final String linePrefix, final LineState state) {
         this.writer = writer;
         this.showThinking = showThinking;
         this.linePrefix = linePrefix;
+        this.state = state;
     }
 
     /** A renderer for subagent output — every line prefixed so it reads apart from the main stream. */
     public ConsoleRenderer forSubagents() {
-        return new ConsoleRenderer(writer, showThinking, "  │ ");
+        return new ConsoleRenderer(writer, showThinking, "  │ ", state);
     }
 
     /** A renderer that also shows dimmed thinking, for a "show thinking" toggle. */
     public ConsoleRenderer withThinking() {
-        return new ConsoleRenderer(writer, true, linePrefix);
+        return new ConsoleRenderer(writer, true, linePrefix, state);
     }
 
     @Override
@@ -50,7 +58,10 @@ public final class ConsoleRenderer implements Out {
             case OutEvent.ActivityFailed(final String action, final String error) -> line("✗ " + action + ": " + error);
             case OutEvent.TurnStarted() -> {
             }
-            case OutEvent.TurnEnded() -> writer.println();
+            case OutEvent.TurnEnded() -> {
+                writer.println();
+                state.midLine = false;
+            }
             case OutEvent.TurnFailed(final String error) -> line("✗ turn failed: " + error);
             case OutEvent.ContextCompacted(final int before, final int after) -> line("(compacted context ~" + before + " → ~" + after + " tokens)");
         }
@@ -94,10 +105,27 @@ public final class ConsoleRenderer implements Out {
     }
 
     private void line(final String text) {
+        if (state.midLine) {
+            // Streamed text rarely ends in a newline before an activity arrives; close its line first.
+            writer.println();
+            state.midLine = false;
+        }
         writer.println(linePrefix + text);
     }
 
     private void write(final String text) {
-        writer.print(linePrefix.isEmpty() ? text : text.replace("\n", "\n" + linePrefix));
+        if (text.isEmpty()) {
+            return;
+        }
+        final String prefixedAtStart = !state.midLine && !linePrefix.isEmpty() ? linePrefix + text : text;
+        writer.print(linePrefix.isEmpty() ? prefixedAtStart : prefixedAfterNewlines(prefixedAtStart));
+        state.midLine = !text.endsWith("\n");
+    }
+
+    /** Inserts the prefix after every embedded newline, without leaving one dangling after a trailing newline. */
+    private String prefixedAfterNewlines(final String text) {
+        final boolean endsWithNewline = text.endsWith("\n");
+        final String core = endsWithNewline ? text.substring(0, text.length() - 1) : text;
+        return core.replace("\n", "\n" + linePrefix) + (endsWithNewline ? "\n" : "");
     }
 }

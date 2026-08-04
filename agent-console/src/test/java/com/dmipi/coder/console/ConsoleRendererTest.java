@@ -43,6 +43,27 @@ class ConsoleRendererTest {
     }
 
     @Test
+    @DisplayName("an activity after unterminated streamed text starts on its own line, never glued")
+    void should_break_the_line_before_an_activity() {
+        // Given / When: streamed text with no trailing newline, then a tool call begins
+        renderer.event(new OutEvent.AnswerDelta("Let me check."));
+        renderer.event(new OutEvent.ActivityStarted("read_file", "app.yaml"));
+
+        // Then
+        assertThat(buffer.toString()).contains("Let me check.\n· read_file app.yaml");
+    }
+
+    @Test
+    @DisplayName("the first streamed subagent line carries the prefix, like every later one")
+    void should_prefix_the_first_subagent_line() {
+        // Given / When: a subagent answer spanning two lines, the first without any preceding event
+        renderer.forSubagents().event(new OutEvent.AnswerDelta("first line\nsecond line"));
+
+        // Then
+        assertThat(buffer.toString()).startsWith("  │ first line\n  │ second line");
+    }
+
+    @Test
     @DisplayName("the subagent renderer prefixes its lines so delegated work reads apart")
     void should_prefix_subagent_output() {
         // When
