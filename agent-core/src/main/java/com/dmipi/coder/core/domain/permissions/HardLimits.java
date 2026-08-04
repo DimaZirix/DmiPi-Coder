@@ -29,7 +29,7 @@ public final class HardLimits {
         if (tool.kind(params) != ToolKind.EXECUTE) {
             return Optional.empty();
         }
-        final String command = tool.callSummary(params);
+        final String command = tool.matchTarget(params);
         for (final Pattern forbidden : FORBIDDEN_COMMANDS) {
             if (forbidden.matcher(command).find()) {
                 return Optional.of("The command '" + command + "' is refused as unconditionally destructive (a hard safety limit).");

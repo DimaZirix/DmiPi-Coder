@@ -7,9 +7,10 @@ import java.util.regex.Pattern;
 
 /**
  * One allow/ask/deny rule from settings: a tool-name match (or {@code *} for any) and an
- * optional glob matched against the <em>whole</em> of the call's one-line summary (the command
- * for a shell call, the path for a file call) — {@code ls*} covers {@code ls -la} but not
- * {@code false}. A rule with no argument glob matches every call to the tool.
+ * optional glob matched against the <em>whole</em> of the call's match target (the command for
+ * a shell call, the path for a file call — {@link Tool#matchTarget}, never an abbreviated
+ * display line) — {@code ls*} covers {@code ls -la} but not {@code false}. A rule with no
+ * argument glob matches every call to the tool.
  */
 public record PermissionRule(String toolName, String argumentGlob, PermissionDecision decision) {
 
@@ -26,7 +27,7 @@ public record PermissionRule(String toolName, String argumentGlob, PermissionDec
         if (!toolName.equals("*") && !toolName.equals(tool.name())) {
             return false;
         }
-        return argumentGlob.isBlank() || globToRegex(argumentGlob).matcher(tool.callSummary(params)).matches();
+        return argumentGlob.isBlank() || globToRegex(argumentGlob).matcher(tool.matchTarget(params)).matches();
     }
 
     /** A glob where {@code *} is any run of characters; it must match the whole summary. */

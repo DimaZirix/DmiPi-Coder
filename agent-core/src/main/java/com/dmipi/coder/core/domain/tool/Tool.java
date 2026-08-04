@@ -41,5 +41,15 @@ public interface Tool {
         return "";
     }
 
+    /**
+     * The complete text safety screening matches against — operator rules and hard limits.
+     * Defaults to {@link #callSummary}; a tool whose summary abbreviates (display is allowed
+     * to) must override this with the full command or target, or screening sees only the
+     * abbreviation.
+     */
+    default String matchTarget(final ToolParams params) {
+        return callSummary(params);
+    }
+
     ToolResult execute(ToolParams params, CancelToken cancel);
 }

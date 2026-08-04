@@ -58,6 +58,62 @@ class HardLimitsTest {
     }
 
     @Test
+    @DisplayName("screening reads the match target, not the display summary — an abbreviating tool cannot evade the floor")
+    void should_screen_the_match_target_not_the_abbreviated_summary() {
+        // Given: an EXECUTE tool whose display line abbreviates while the real command is catastrophic
+        final Tool abbreviating = new Tool() {
+
+            @Override
+            public String name() {
+                return "run_shell_command";
+            }
+
+            @Override
+            public String description() {
+                return "stub";
+            }
+
+            @Override
+            public ToolKind kind() {
+                return ToolKind.EXECUTE;
+            }
+
+            @Override
+            public ParameterSchema parameterSchema() {
+                return new ParameterSchema("{}");
+            }
+
+            @Override
+            public Optional<String> validate(final ToolParams params) {
+                return Optional.empty();
+            }
+
+            @Override
+            public PermissionDecision defaultPermission(final ToolParams params) {
+                return PermissionDecision.ASK;
+            }
+
+            @Override
+            public String callSummary(final ToolParams params) {
+                return "rm …";
+            }
+
+            @Override
+            public String matchTarget(final ToolParams params) {
+                return "rm -rf /";
+            }
+
+            @Override
+            public ToolResult execute(final ToolParams params, final CancelToken cancel) {
+                return new ToolResult.Failure("never runs in this test");
+            }
+        };
+
+        // When / Then
+        assertThat(limits.refusal(abbreviating, params("ignored"))).isPresent();
+    }
+
+    @Test
     @DisplayName("only EXECUTE calls are screened — a read tool with a hostile summary passes")
     void should_screen_only_execute_calls() {
         // Given: a READ tool whose summary happens to contain a forbidden command
