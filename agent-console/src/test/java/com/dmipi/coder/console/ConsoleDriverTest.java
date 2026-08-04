@@ -94,6 +94,54 @@ class ConsoleDriverTest {
         coder.close();
     }
 
+    @Test
+    @DisplayName("an interrupt during a turn cancels it; idle, the interrupt means exit")
+    void should_cancel_the_running_turn_on_interrupt() throws InterruptedException {
+        // Given: a model that streams only once cancelled, so the turn blocks until Ctrl+C
+        final LlmClient blockingUntilCancelled = (request, cancel, events) -> {
+            while (!cancel.isCancelled()) {
+                try {
+                    Thread.sleep(5);
+                } catch (final InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+            events.accept(new LlmStreamEvent.Finished(LlmStreamEvent.FinishReason.STOP));
+        };
+        final Coder coder = coder(blockingUntilCancelled);
+        final Console console = new Console(coder, reader("block\n"), new PrintWriter(out), null);
+        final Thread driver = new Thread(console::run);
+        driver.start();
+        awaitOutput("Ready");
+
+        // When: the interrupt decision fires mid-turn (polled until the turn is actually running), then again when idle
+        boolean duringTurn = false;
+        final long deadline = System.currentTimeMillis() + 5_000;
+        while (!duringTurn && System.currentTimeMillis() < deadline) {
+            duringTurn = console.handleInterrupt();
+            if (!duringTurn) {
+                Thread.sleep(5);
+            }
+        }
+        driver.join(5_000);
+        final boolean whenIdle = console.handleInterrupt();
+
+        // Then: mid-turn cancels (and the console survives to exit on EOF); idle means exit
+        assertThat(duringTurn).isTrue();
+        assertThat(whenIdle).isFalse();
+        assertThat(driver.isAlive()).isFalse();
+        assertThat(out.toString()).contains("(cancelling the current turn)");
+        coder.close();
+    }
+
+    private void awaitOutput(final String marker) throws InterruptedException {
+        final long deadline = System.currentTimeMillis() + 5_000;
+        while (!out.toString().contains(marker) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(5);
+        }
+    }
+
     private Coder coder(final LlmClient client) {
         return coderWith(new RecordingProvider(client), FAST);
     }

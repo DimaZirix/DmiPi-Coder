@@ -13,10 +13,13 @@ import java.time.LocalDateTime;
  */
 public final class Console {
 
+    private static final int EXIT_CODE_INTERRUPTED = 130;
+
     private final Coder coder;
     private final BufferedReader input;
     private final PrintWriter output;
     private final String autosaveName;
+    private volatile boolean turnRunning;
 
     /** @param autosaveName the session name to autosave under after each turn, or null to disable autosave */
     public Console(final Coder coder, final BufferedReader input, final PrintWriter output, final String autosaveName) {
@@ -26,8 +29,9 @@ public final class Console {
         this.autosaveName = autosaveName;
     }
 
-    /** Reads and handles lines until {@code /exit} or end of input. */
+    /** Reads and handles lines until {@code /exit} or end of input. Ctrl+C cancels the running turn; idle, it exits. */
     public void run() {
+        installCancelHandler();
         output.println("Ready. Type a prompt, a /command (" + String.join(", ", SlashCommand.keywords()) + "), or /exit.");
         while (true) {
             output.print("\n> ");
@@ -47,7 +51,12 @@ public final class Console {
     }
 
     private void runTurn(final String prompt) {
-        coder.runTurn(prompt, new CancelToken());
+        turnRunning = true;
+        try {
+            coder.runTurn(prompt, new CancelToken());
+        } finally {
+            turnRunning = false;
+        }
         if (autosaveName != null) {
             try {
                 coder.saveSession(autosaveName);
@@ -60,6 +69,33 @@ public final class Console {
     /** A stable autosave name for a session started now, from a timestamp the caller supplies. */
     public static String autosaveNameFor(final LocalDateTime startedAt) {
         return "session-" + startedAt.toString().replaceAll("[^0-9]", "-");
+    }
+
+    /**
+     * The Ctrl+C decision: a running turn is cancelled (true); idle, the caller should exit
+     * (false). Package-visible so the behavior is testable without raising real signals.
+     */
+    boolean handleInterrupt() {
+        if (!turnRunning) {
+            return false;
+        }
+        coder.cancelCurrentTurn();
+        output.println();
+        output.println("(cancelling the current turn)");
+        output.flush();
+        return true;
+    }
+
+    private void installCancelHandler() {
+        try {
+            sun.misc.Signal.handle(new sun.misc.Signal("INT"), signal -> {
+                if (!handleInterrupt()) {
+                    Runtime.getRuntime().exit(EXIT_CODE_INTERRUPTED);
+                }
+            });
+        } catch (final RuntimeException unsupported) {
+            // Signal handling is a JVM extra (-Xrs disables it); without it Ctrl+C keeps its default meaning.
+        }
     }
 
     private String readLine() {
