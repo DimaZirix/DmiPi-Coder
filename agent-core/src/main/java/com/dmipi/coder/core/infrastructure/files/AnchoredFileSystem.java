@@ -42,7 +42,7 @@ public final class AnchoredFileSystem implements FileSystem {
     @Override
     public String read(final Path path) {
         try {
-            return Files.readString(path);
+            return Files.readString(confined(path));
         } catch (final IOException failure) {
             throw new UncheckedIOException("Could not read " + path + ": " + failure.getMessage(), failure);
         }
@@ -51,10 +51,11 @@ public final class AnchoredFileSystem implements FileSystem {
     @Override
     public void write(final Path path, final String content) {
         try {
-            if (path.getParent() != null) {
-                Files.createDirectories(path.getParent());
+            final Path target = confined(path);
+            if (target.getParent() != null) {
+                Files.createDirectories(target.getParent());
             }
-            Files.writeString(path, content);
+            Files.writeString(target, content);
         } catch (final IOException failure) {
             throw new UncheckedIOException("Could not write " + path + ": " + failure.getMessage(), failure);
         }
@@ -62,11 +63,12 @@ public final class AnchoredFileSystem implements FileSystem {
 
     @Override
     public void delete(final Path path) {
-        if (!Files.exists(path)) {
+        final Path target = confined(path);
+        if (!Files.exists(target)) {
             return;
         }
         try {
-            Files.walkFileTree(path, new SimpleFileVisitor<>() {
+            Files.walkFileTree(target, new SimpleFileVisitor<>() {
 
                 @Override
                 public FileVisitResult visitFile(final Path file, final BasicFileAttributes attributes) throws IOException {
@@ -90,7 +92,7 @@ public final class AnchoredFileSystem implements FileSystem {
 
     @Override
     public List<String> list(final Path directory) {
-        try (Stream<Path> entries = Files.list(directory)) {
+        try (Stream<Path> entries = Files.list(confined(directory))) {
             return entries
                     .map(AnchoredFileSystem::entryName)
                     .sorted()
@@ -102,16 +104,28 @@ public final class AnchoredFileSystem implements FileSystem {
 
     @Override
     public boolean exists(final Path path) {
-        return Files.exists(path);
+        return Files.exists(confined(path));
     }
 
     @Override
     public long size(final Path path) {
         try {
-            return Files.size(path);
+            return Files.size(confined(path));
         } catch (final IOException failure) {
             throw new UncheckedIOException("Could not read the size of " + path + ": " + failure.getMessage(), failure);
         }
+    }
+
+    /**
+     * Every accessor re-checks the anchor, so confinement holds by construction — not by the
+     * caller's discipline of only passing {@link #resolve}d paths.
+     */
+    private Path confined(final Path path) {
+        final Path normalized = path.toAbsolutePath().normalize();
+        if (!normalized.startsWith(anchor)) {
+            throw new IllegalArgumentException("The path '" + path + "' escapes the anchored directory " + anchor + ".");
+        }
+        return normalized;
     }
 
     @Override

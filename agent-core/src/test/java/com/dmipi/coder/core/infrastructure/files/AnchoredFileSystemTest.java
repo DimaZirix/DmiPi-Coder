@@ -60,6 +60,25 @@ class AnchoredFileSystemTest {
     }
 
     @Test
+    @DisplayName("accessors themselves refuse a path outside the anchor — confinement does not rely on resolve() discipline")
+    void should_refuse_direct_paths_outside_the_anchor() {
+        // Given
+        final AnchoredFileSystem files = new AnchoredFileSystem(project);
+        final Path outside = project.resolve("..").resolve("elsewhere.txt");
+
+        // When / Then: every accessor is its own guard
+        org.assertj.core.api.Assertions.assertThatIllegalArgumentException()
+                .isThrownBy(() -> files.read(outside))
+                .withMessageContaining("escapes");
+        org.assertj.core.api.Assertions.assertThatIllegalArgumentException()
+                .isThrownBy(() -> files.write(outside, "x"));
+        org.assertj.core.api.Assertions.assertThatIllegalArgumentException()
+                .isThrownBy(() -> files.delete(outside));
+        org.assertj.core.api.Assertions.assertThatIllegalArgumentException()
+                .isThrownBy(() -> files.exists(outside));
+    }
+
+    @Test
     @DisplayName("delete removes a directory with everything beneath it; a missing path is a no-op")
     void should_delete_a_directory_tree() {
         // Given
