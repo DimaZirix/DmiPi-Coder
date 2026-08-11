@@ -36,7 +36,7 @@ final class WriteFileTool implements Tool {
     private final ReadTracker readTracker;
 
     WriteFileTool(final FileSystem files) {
-        this(files, null);
+        this(files, ReadTracker.off());
     }
 
     WriteFileTool(final FileSystem files, final ReadTracker readTracker) {
@@ -106,14 +106,12 @@ final class WriteFileTool implements Tool {
             final Path path = files.resolve(pathParam);
             final String content = params.string("content").orElseThrow();
             final boolean existed = files.exists(path);
-            if (existed && readTracker != null && !readTracker.wasRead(path)) {
+            if (existed && !readTracker.wasRead(path)) {
                 return new ToolResult.Failure("Read " + pathParam + " with read_file before overwriting it, so you replace content you have seen.");
             }
             final String before = existed ? files.read(path) : "";
             files.write(path, content);
-            if (readTracker != null) {
-                readTracker.markRead(path);
-            }
+            readTracker.markRead(path);
             final String verb = existed ? "Overwrote" : "Created and wrote to new file";
             return new ToolResult.Success(verb + " " + pathParam + " (" + content.length() + " characters).", new Display.Diff(UnifiedDiffs.between(pathParam, before, content)));
         } catch (final RuntimeException failure) {

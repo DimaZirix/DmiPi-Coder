@@ -92,15 +92,16 @@ public final class AgentLoop {
             if (cancel.isCancelled()) {
                 return;
             }
-            if (guards.contextManager() != null) {
-                guards.contextManager().maybeCompact(conversation, cancel);
-            }
+            guards.wiredContextManager().ifPresent(manager -> manager.maybeCompact(conversation, cancel));
 
             final Step result = streamStep(cancel, step);
             conversation.add(ChatMessage.assistant(result.text(), result.toolCalls()));
             if (result.toolCalls().isEmpty()) {
                 // One nudge per turn: a model that stalls again after being told to continue gets the turn back to the user.
-                if (nudged || guards.nextSpeaker() == null || cancel.isCancelled() || !guards.nextSpeaker().modelShouldContinue(result.text(), cancel)) {
+                final boolean announcedMoreWork = !nudged && !cancel.isCancelled() && guards.wiredNextSpeaker()
+                        .map(check -> check.modelShouldContinue(result.text(), cancel))
+                        .orElse(false);
+                if (!announcedMoreWork) {
                     return;
                 }
                 nudged = true;
@@ -123,9 +124,9 @@ public final class AgentLoop {
         final StringBuilder text = new StringBuilder();
         // Keyed and iterated by wire index: fragments may arrive out of order, execution may not.
         final Map<Integer, PendingCall> pending = new TreeMap<>();
-        final List<ChatMessage> requestMessages = guards.reminders() == null
-                ? conversation.messages()
-                : guards.reminders().applyTo(conversation.messages(), step);
+        final List<ChatMessage> requestMessages = guards.wiredReminders()
+                .map(reminders -> reminders.applyTo(conversation.messages(), step))
+                .orElseGet(conversation::messages);
         client.get().stream(new ChatRequest(requestMessages, tools.schemas()), cancel, event -> {
             switch (event) {
                 case LlmStreamEvent.TextDelta(final String delta) -> {

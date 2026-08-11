@@ -32,7 +32,7 @@ final class ReadFileTool implements Tool {
     private final ReadTracker readTracker;
 
     ReadFileTool(final FileSystem files) {
-        this(files, null);
+        this(files, ReadTracker.off());
     }
 
     ReadFileTool(final FileSystem files, final ReadTracker readTracker) {
@@ -88,9 +88,7 @@ final class ReadFileTool implements Tool {
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure(failure.getMessage());
         }
-        if (readTracker != null) {
-            readTracker.markRead(path);
-        }
+        readTracker.markRead(path);
 
         final List<String> lines = content.lines().toList();
         final long offsetParam = Math.max(1, params.integer("offset").orElse(1L));

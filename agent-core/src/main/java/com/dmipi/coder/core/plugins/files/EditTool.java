@@ -42,7 +42,7 @@ final class EditTool implements Tool {
     private final ReadTracker readTracker;
 
     EditTool(final FileSystem files) {
-        this(files, null);
+        this(files, ReadTracker.off());
     }
 
     EditTool(final FileSystem files, final ReadTracker readTracker) {
@@ -131,7 +131,7 @@ final class EditTool implements Tool {
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure(failure.getMessage());
         }
-        if (readTracker != null && files.exists(path) && !readTracker.wasRead(path)) {
+        if (files.exists(path) && !readTracker.wasRead(path)) {
             return new ToolResult.Failure("Read " + pathParam + " with read_file before editing it, so your edit matches the current content.");
         }
         final String content;
@@ -158,9 +158,7 @@ final class EditTool implements Tool {
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure(failure.getMessage());
         }
-        if (readTracker != null) {
-            readTracker.markRead(path);
-        }
+        readTracker.markRead(path);
         return new ToolResult.Success(editedSnippet(pathParam, content, revised, oldString, newString), new Display.Diff(UnifiedDiffs.between(pathParam, content, revised)));
     }
 

@@ -13,12 +13,26 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ReadTracker {
 
     private final Set<Path> read = ConcurrentHashMap.newKeySet();
+    private final boolean enforcing;
+
+    public ReadTracker() {
+        this(true);
+    }
+
+    private ReadTracker(final boolean enforcing) {
+        this.enforcing = enforcing;
+    }
+
+    /** The gate turned off: every file counts as read. The null-object for wirings without the gate. */
+    public static ReadTracker off() {
+        return new ReadTracker(false);
+    }
 
     void markRead(final Path path) {
         read.add(path.toAbsolutePath().normalize());
     }
 
     boolean wasRead(final Path path) {
-        return read.contains(path.toAbsolutePath().normalize());
+        return !enforcing || read.contains(path.toAbsolutePath().normalize());
     }
 }

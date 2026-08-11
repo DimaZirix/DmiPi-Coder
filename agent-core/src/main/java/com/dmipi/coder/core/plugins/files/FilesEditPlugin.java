@@ -12,12 +12,12 @@ public final class FilesEditPlugin implements Plugin {
     private final ReadTracker readTracker;
 
     public FilesEditPlugin() {
-        this(null);
+        this(ReadTracker.off());
     }
 
     /** Shares a read-tracker with {@link FilesReadPlugin} to enable the read-before-edit gate. */
     public FilesEditPlugin(final ReadTracker readTracker) {
-        this.readTracker = readTracker;
+        this.readTracker = java.util.Objects.requireNonNull(readTracker, "readTracker — use ReadTracker.off() for a wiring without the gate");
     }
 
     @Override
