@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 class ArchitectureTest {
 
     private static final Path SOURCES = Path.of("src/main/java/com/dmipi/coder/core");
+    private static final Set<String> TRUSTED_SANDBOX_PLUGINS = Set.of("sandbox", "podman", "bubblewrap");
     private static final String BASE = "com.dmipi.coder.core.";
     private static final Pattern IMPORT = Pattern.compile("^import\\s+(?:static\\s+)?([\\w.]+);", Pattern.MULTILINE);
     private static final Map<String, Set<String>> ALLOWED = Map.of(
@@ -31,7 +32,7 @@ class ArchitectureTest {
             "application", Set.of("domain", "application"),
             "plugin", Set.of("domain", "plugin"),
             "infrastructure", Set.of("domain", "application", "plugin", "infrastructure"),
-            "plugins", Set.of("domain", "plugin", "infrastructure", "plugins"),
+            "plugins", Set.of("domain", "plugin", "plugins"),
             "api", Set.of("domain", "application", "plugin", "infrastructure", "plugins", "api"));
 
     @Test
@@ -58,6 +59,13 @@ class ArchitectureTest {
                 continue;
             }
             final String importedLayer = imported.substring(BASE.length()).split("\\.")[0];
+            if (layer.equals("plugins") && importedLayer.equals("infrastructure")) {
+                // Sandbox providers are trusted-computing-base (SANDBOX.md): they share ProcessRunner by design.
+                if (!TRUSTED_SANDBOX_PLUGINS.contains(ownPluginPackage)) {
+                    violations.add(file + " -> " + imported + " (plugins must not import infrastructure; only sandbox providers are TCB-exempt)");
+                }
+                continue;
+            }
             if (!ALLOWED.get(layer).contains(importedLayer)) {
                 violations.add(file + " -> " + imported + " (" + layer + " must not import " + importedLayer + ")");
             }

@@ -1,4 +1,4 @@
-package com.dmipi.coder.core.infrastructure.files;
+package com.dmipi.coder.core.plugin;
 
 import com.github.difflib.DiffUtils;
 import com.github.difflib.UnifiedDiffUtils;

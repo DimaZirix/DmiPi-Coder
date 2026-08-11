@@ -8,7 +8,7 @@ import com.dmipi.coder.core.domain.tool.Tool;
 import com.dmipi.coder.core.domain.tool.ToolKind;
 import com.dmipi.coder.core.domain.tool.ToolParams;
 import com.dmipi.coder.core.domain.tool.ToolResult;
-import com.dmipi.coder.core.infrastructure.files.UnifiedDiffs;
+import com.dmipi.coder.core.plugin.UnifiedDiffs;
 import java.util.Optional;
 
 /**
