@@ -41,11 +41,11 @@ public final class SessionShell implements Shell, AutoCloseable {
 
     @Override
     public ShellResult run(final String command, final CancelToken cancel) {
-        return run(command, Optional.empty(), cancel);
+        return run(command, spec.defaultTimeout(), cancel);
     }
 
     @Override
-    public ShellResult run(final String command, final Optional<Duration> timeout, final CancelToken cancel) {
+    public ShellResult run(final String command, final Duration timeout, final CancelToken cancel) {
         return sandbox().run(command, clamped(timeout), cancel);
     }
 
@@ -57,9 +57,8 @@ public final class SessionShell implements Shell, AutoCloseable {
         return "bg-" + backgroundCounter.incrementAndGet();
     }
 
-    private Duration clamped(final Optional<Duration> requested) {
-        final Duration timeout = requested.orElse(spec.defaultTimeout());
-        return timeout.compareTo(spec.maxTimeout()) > 0 ? spec.maxTimeout() : timeout;
+    private Duration clamped(final Duration requested) {
+        return requested.compareTo(spec.maxTimeout()) > 0 ? spec.maxTimeout() : requested;
     }
 
     private synchronized Sandbox sandbox() {

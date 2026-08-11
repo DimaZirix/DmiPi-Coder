@@ -73,6 +73,9 @@ final class ShellTool implements Tool {
         if (params.string("command").filter(command -> !command.isBlank()).isEmpty()) {
             return Optional.of("Parameter 'command' is required.");
         }
+        if (params.integer("timeout_seconds").filter(seconds -> seconds <= 0).isPresent()) {
+            return Optional.of("Parameter 'timeout_seconds' must be a positive number of seconds, got " + params.integer("timeout_seconds").orElseThrow() + ".");
+        }
         return Optional.empty();
     }
 
@@ -105,7 +108,7 @@ final class ShellTool implements Tool {
         final Optional<Duration> timeout = params.integer("timeout_seconds").map(Duration::ofSeconds);
         final ShellResult result;
         try {
-            result = shell.run(command, timeout, cancel);
+            result = timeout.isPresent() ? shell.run(command, timeout.orElseThrow(), cancel) : shell.run(command, cancel);
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure("The command could not be run: " + failure.getMessage());
         }
