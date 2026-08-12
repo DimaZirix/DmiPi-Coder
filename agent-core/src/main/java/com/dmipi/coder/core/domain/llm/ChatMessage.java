@@ -14,6 +14,15 @@ public record ChatMessage(Role role, String content, List<ToolCall> toolCalls, S
         Objects.requireNonNull(content, "content");
         Objects.requireNonNull(toolCallId, "toolCallId");
         toolCalls = List.copyOf(Objects.requireNonNull(toolCalls, "toolCalls"));
+        if (!toolCalls.isEmpty() && role != Role.ASSISTANT) {
+            throw new IllegalArgumentException("Only an assistant message carries tool calls, got role " + role + " with " + toolCalls.size() + ".");
+        }
+        if (!toolCallId.isBlank() && role != Role.TOOL) {
+            throw new IllegalArgumentException("Only a tool-result message carries a toolCallId, got role " + role + " with '" + toolCallId + "'.");
+        }
+        if (role == Role.TOOL && toolCallId.isBlank()) {
+            throw new IllegalArgumentException("A tool-result message requires the toolCallId it answers.");
+        }
     }
 
     public static ChatMessage system(final String content) {
