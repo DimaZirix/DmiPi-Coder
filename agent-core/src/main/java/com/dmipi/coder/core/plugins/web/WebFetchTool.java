@@ -103,7 +103,12 @@ final class WebFetchTool implements Tool {
             return new ToolResult.Failure("Could not fetch " + url + ": " + failure.getMessage());
         }
 
-        final String summary = summarize(params.string("prompt").orElseThrow(), pageText(response), cancel);
+        final String summary;
+        try {
+            summary = summarize(params.string("prompt").orElseThrow(), pageText(response), cancel);
+        } catch (final RuntimeException failure) {
+            return new ToolResult.Failure("Fetched " + url + " but the summarizer model failed: " + failure.getMessage());
+        }
         if (summary.isBlank()) {
             return new ToolResult.Failure("Fetched " + url + " but could not summarize its content.");
         }

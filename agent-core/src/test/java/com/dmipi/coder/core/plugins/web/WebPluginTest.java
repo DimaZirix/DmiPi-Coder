@@ -74,6 +74,30 @@ class WebPluginTest {
     }
 
     @Test
+    @DisplayName("a summarizer outage becomes a tool failure the model can read, not an escaped exception")
+    void should_report_a_summarizer_failure_as_a_tool_failure() {
+        // Given: the page fetches fine, but the summarizer model throws
+        serve("/page", "text/html", "<html><body>content</body></html>");
+        final ScriptedClient deadSummarizer = new ScriptedClient(List.of());
+        final WebFetchTool tool = new WebFetchTool(permissiveHttp(), llms(deadSummarizer));
+
+        // When
+        final ToolResult result = tool.execute(params("{\"url\": \"" + url("/page") + "\", \"prompt\": \"anything\"}"), new CancelToken());
+
+        // Then
+        assertThat(result).isInstanceOf(ToolResult.Failure.class);
+        assertThat(result.llmContent()).contains("summarizer model failed");
+    }
+
+    @Test
+    @DisplayName("double-escaped entities decode one level, deterministically — &amp;amp;lt; never becomes <")
+    void should_decode_entities_in_a_fixed_order() {
+        // When / Then
+        assertThat(HtmlText.extract("&amp;amp;lt;")).isEqualTo("&amp;lt;");
+        assertThat(HtmlText.extract("a &amp; b &lt;tag&gt;")).isEqualTo("a & b <tag>");
+    }
+
+    @Test
     @DisplayName("redirects are followed to the target; a failing status becomes a tool failure")
     void should_follow_redirects_and_report_http_failures() {
         // Given
