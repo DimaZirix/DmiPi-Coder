@@ -12,6 +12,7 @@ import com.dmipi.coder.core.domain.llm.ModelRegistry;
 import com.dmipi.coder.core.domain.llm.ProtocolProvider;
 import com.dmipi.coder.core.domain.llm.Role;
 import com.dmipi.coder.core.domain.llm.Tier;
+import com.dmipi.coder.core.domain.llm.ToolCall;
 import com.dmipi.coder.core.plugin.Capabilities;
 import com.dmipi.coder.core.plugin.Plugin;
 import com.dmipi.coder.core.plugin.PluginRegistrar;
@@ -61,6 +62,38 @@ class ContextManagerTest {
         assertThat(client.requests().getLast().messages())
                 .anySatisfy(message -> assertThat(message.content()).contains("COMPACTED-STATE").doesNotContain("<state_snapshot>"))
                 .noneSatisfy(message -> assertThat(message.content()).contains("x".repeat(1_000)));
+    }
+
+    @Test
+    @DisplayName("tool-call arguments count toward the budget — big writes trigger compaction too")
+    void should_count_tool_call_arguments_toward_the_budget() {
+        // Given: a tiny window where the bulk sits in a write_file argument, not in message content
+        final ModelDeclaration tinyWindow = new ModelDeclaration("tiny", "scripted", "", Tier.FAST, 200);
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.textStep("<state_snapshot>SNAP</state_snapshot>")));
+        final ModelRegistry models = new ModelRegistry(List.of(tinyWindow), List.of(new ProtocolProvider() {
+
+            @Override
+            public String protocol() {
+                return "scripted";
+            }
+
+            @Override
+            public LlmClient connect(final ModelDeclaration declaration) {
+                return client;
+            }
+        }));
+        final ContextManager manager = new ContextManager(models, 0.5, out, "summarize");
+        final Conversation conversation = new Conversation("instructions");
+        conversation.add(ChatMessage.assistant("writing", List.of(new ToolCall("c1", "write_file", "{\"content\": \"" + "x".repeat(1_500) + "\"}"))));
+        conversation.add(ChatMessage.toolResult("c1", "ok"));
+        conversation.add(ChatMessage.user("next"));
+
+        // When
+        manager.maybeCompact(conversation, new CancelToken());
+
+        // Then: the argument payload alone crossed the threshold and compaction ran
+        assertThat(out.kinds()).contains(OutEvent.ContextCompacted.class);
     }
 
     @Test

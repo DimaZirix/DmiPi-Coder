@@ -7,6 +7,7 @@ import com.dmipi.coder.core.domain.llm.ChatRequest;
 import com.dmipi.coder.core.domain.llm.LlmStreamEvent;
 import com.dmipi.coder.core.domain.llm.ModelRegistry;
 import com.dmipi.coder.core.domain.llm.Role;
+import com.dmipi.coder.core.domain.llm.ToolCall;
 import java.util.List;
 
 /**
@@ -82,7 +83,11 @@ public final class ContextManager {
     private String summarize(final List<ChatMessage> older, final CancelToken cancel) {
         final StringBuilder transcript = new StringBuilder();
         for (final ChatMessage message : older) {
-            transcript.append(message.role().name()).append(": ").append(message.content()).append('\n');
+            transcript.append(message.role().name()).append(": ").append(message.content());
+            for (final ToolCall call : message.toolCalls()) {
+                transcript.append("\n[called ").append(call.name()).append(" with ").append(call.argumentsJson()).append(']');
+            }
+            transcript.append('\n');
         }
         final ChatRequest request = new ChatRequest(
                 List.of(ChatMessage.system(summaryInstructions), ChatMessage.user(transcript.toString())),
@@ -106,6 +111,11 @@ public final class ContextManager {
         int chars = 0;
         for (final ChatMessage message : messages) {
             chars += message.content().length();
+            // Tool-call arguments ride in the request too — for a coding agent the whole-file
+            // write payloads are often the largest part of the budget.
+            for (final ToolCall call : message.toolCalls()) {
+                chars += call.argumentsJson().length();
+            }
         }
         return chars / CHARS_PER_TOKEN;
     }
