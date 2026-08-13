@@ -114,7 +114,11 @@ public final class AgentLoop {
             }
 
             for (final ToolCall call : result.toolCalls()) {
-                conversation.add(ChatMessage.toolResult(call.id(), executeCall(call, cancel)));
+                // A cancel mid-step must not gate or run the remaining calls — but every call
+                // still gets a result, so the conversation keeps its call/result pairing.
+                conversation.add(ChatMessage.toolResult(call.id(), cancel.isCancelled()
+                        ? "[Cancelled by the user before this call ran.]"
+                        : executeCall(call, cancel)));
             }
         }
         out.event(new OutEvent.AnswerDelta(STEP_LIMIT_NOTE.formatted(maxStepsPerTurn)));

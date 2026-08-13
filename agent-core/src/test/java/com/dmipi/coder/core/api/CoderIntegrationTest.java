@@ -8,6 +8,7 @@ import com.dmipi.coder.core.domain.event.Display;
 import com.dmipi.coder.core.domain.event.OutEvent;
 import com.dmipi.coder.core.domain.hil.Answer;
 import com.dmipi.coder.core.domain.llm.LlmClient;
+import com.dmipi.coder.core.domain.llm.LlmStreamEvent;
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.llm.ProtocolProvider;
 import com.dmipi.coder.core.domain.llm.Role;
@@ -131,6 +132,47 @@ class CoderIntegrationTest {
 
         // Then
         assertThat(coder.mode()).isEqualTo(Mode.PLAN);
+    }
+
+    @Test
+    @DisplayName("a cancel during one tool call stops the rest of the step — no post-cancel prompts, no post-cancel execution")
+    void should_not_gate_or_run_tool_calls_after_a_cancel() {
+        // Given: one step requesting two calls; the first cancels the turn, the second would ask
+        final CancelToken token = new CancelToken();
+        final boolean[] secondRan = {false};
+        final ScriptedClient client = new ScriptedClient(List.of(List.of(
+                new LlmStreamEvent.ToolCallDelta(0, "c1", "trigger_cancel", "{}"),
+                new LlmStreamEvent.ToolCallDelta(1, "c2", "second", "{}"),
+                new LlmStreamEvent.Finished(LlmStreamEvent.FinishReason.TOOL_CALLS))));
+        final ScriptedHil hil = new ScriptedHil(List.of());
+        try (Coder coder = Coder.builder()
+                .out(out)
+                .hil(hil)
+                .model(MODEL)
+                .registerPlugin(toolPlugin(client, PermissionDecision.ALLOW))
+                .registerPlugin(new Plugin() {
+
+                    @Override
+                    public void install(final PluginRegistrar registrar, final Capabilities capabilities) {
+                        registrar.registerTool(new StubTool("trigger_cancel", ToolKind.READ, PermissionDecision.ALLOW, params -> {
+                            token.cancel();
+                            return new ToolResult.Success("cancelling", new Display.Text("cancelled"));
+                        }));
+                        registrar.registerTool(new StubTool("second", ToolKind.EXECUTE, PermissionDecision.ASK, params -> {
+                            secondRan[0] = true;
+                            return new ToolResult.Success("ran", new Display.Text("ran"));
+                        }));
+                    }
+                })
+                .build()) {
+
+            // When
+            coder.runTurn("go", token);
+        }
+
+        // Then: the second call neither asked (ScriptedHil would have thrown) nor ran
+        assertThat(hil.asked()).isEmpty();
+        assertThat(secondRan[0]).isFalse();
     }
 
     /** Contributes the scripted protocol provider, an echo tool with the given baseline, and a section. */
