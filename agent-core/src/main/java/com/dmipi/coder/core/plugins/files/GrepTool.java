@@ -115,7 +115,11 @@ final class GrepTool implements Tool {
         }
 
         if (hits.isEmpty()) {
-            return new ToolResult.Success("No matches for \"" + patternText + "\".", new Display.Text("no matches"));
+            // Honesty over brevity: "no matches" with skipped candidates is not a true negative.
+            final String skippedNote = skipped > 0
+                    ? " [" + skipped + " file(s) skipped (unreadable, binary, or over 1 MB) — the pattern may match inside them]"
+                    : "";
+            return new ToolResult.Success("No matches for \"" + patternText + "\"." + skippedNote, new Display.Text("no matches"));
         }
         final boolean capped = hits.size() >= limit;
         final String header = "Found " + hits.size() + (capped ? "+" : "") + " matching line(s) for \"" + patternText + "\":\n";

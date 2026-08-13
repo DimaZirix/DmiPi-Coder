@@ -136,7 +136,7 @@ class SearchToolsTest {
     }
 
     @Test
-    @DisplayName("grep skips a file over the size cap instead of loading it into memory")
+    @DisplayName("grep skips a file over the size cap — and says so instead of reporting a clean negative")
     void should_skip_an_oversized_file() throws IOException {
         // Given: a >1 MB file whose content would match
         Files.writeString(project.resolve("huge.log"), "class App match\n" + "x".repeat(1_100_000));
@@ -144,8 +144,8 @@ class SearchToolsTest {
         // When
         final ToolResult result = new GrepTool(new AnchoredFileSystem(project)).execute(params("{\"pattern\": \"class App\", \"glob\": \"**/*.log\"}"), new CancelToken());
 
-        // Then
-        assertThat(result.llmContent()).contains("No matches");
+        // Then: no silent lie — the skip is disclosed next to the no-match claim
+        assertThat(result.llmContent()).contains("No matches").contains("1 file(s) skipped");
     }
 
     private ToolParams params(final String json) {

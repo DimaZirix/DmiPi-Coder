@@ -17,6 +17,8 @@ import java.util.Optional;
 final class ReadFileTool implements Tool {
 
     private static final int MAX_LINES = 2_000;
+    private static final long MAX_FILE_BYTES = 10_000_000;
+    private static final int MAX_LINE_CHARS = 4_000;
     private static final String SCHEMA = """
             {
               "type": "object",
@@ -47,7 +49,7 @@ final class ReadFileTool implements Tool {
 
     @Override
     public String description() {
-        return "Reads a text file from the project. Returns up to " + MAX_LINES + " lines per call; use 'offset' and 'limit' to read a window of a larger file.";
+        return "Reads a text file from the project. Returns up to " + MAX_LINES + " lines per call; use 'offset' and 'limit' to read a window of a larger file. Files over " + MAX_FILE_BYTES + " bytes are refused, and a single line longer than " + MAX_LINE_CHARS + " characters is truncated with a marker.";
     }
 
     @Override
@@ -78,12 +80,21 @@ final class ReadFileTool implements Tool {
         return params.string("path").orElse("");
     }
 
+    /** Bounds the context cost of a single line — a minified one-line bundle must not flood the window. */
+    private static String cappedLine(final String line) {
+        return line.length() > MAX_LINE_CHARS ? line.substring(0, MAX_LINE_CHARS) + "[…line truncated]" : line;
+    }
+
     @Override
     public ToolResult execute(final ToolParams params, final CancelToken cancel) {
         final Path path;
         final String content;
         try {
             path = files.resolve(params.string("path").orElseThrow());
+            if (files.exists(path) && files.size(path) > MAX_FILE_BYTES) {
+                return new ToolResult.Failure("The file " + params.string("path").orElseThrow() + " is " + files.size(path)
+                        + " bytes — over the " + MAX_FILE_BYTES + "-byte read limit. Use grep_search to find the relevant part, or run_shell_command with head/tail/sed for a slice.");
+            }
             content = files.read(path);
         } catch (final RuntimeException failure) {
             return new ToolResult.Failure(failure.getMessage());
@@ -102,7 +113,7 @@ final class ReadFileTool implements Tool {
         final String banner = "[Showing lines " + offset + "-" + end + " of " + lines.size() + " total lines. Use 'offset' and 'limit' to read more.]\n";
         final StringBuilder numbered = new StringBuilder(banner);
         for (int i = offset - 1; i < end; i++) {
-            numbered.append(String.format("%6d\t%s", i + 1, lines.get(i)));
+            numbered.append(String.format("%6d\t%s", i + 1, cappedLine(lines.get(i))));
             if (i < end - 1) {
                 numbered.append('\n');
             }
