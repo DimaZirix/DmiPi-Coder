@@ -36,10 +36,19 @@ public final class MemoryPlugin implements Plugin {
 
     private static String section(final MemoryStore store) {
         final StringBuilder section = new StringBuilder(GUIDANCE);
-        store.load(MemoryScope.USER)
+        loaded(store, MemoryScope.USER)
                 .ifPresent(memory -> section.append("\n\n### User memory\n\n").append(memory));
-        store.load(MemoryScope.PROJECT)
+        loaded(store, MemoryScope.PROJECT)
                 .ifPresent(memory -> section.append("\n\n### Project memory\n\n").append(memory));
         return section.toString();
+    }
+
+    /** An unreadable memory file degrades to a visible note — one broken CLAUDE.md must not abort every session. */
+    private static java.util.Optional<String> loaded(final MemoryStore store, final MemoryScope scope) {
+        try {
+            return store.load(scope);
+        } catch (final RuntimeException unreadable) {
+            return java.util.Optional.of("(the " + scope.label() + " memory file could not be read: " + unreadable.getMessage() + ")");
+        }
     }
 }

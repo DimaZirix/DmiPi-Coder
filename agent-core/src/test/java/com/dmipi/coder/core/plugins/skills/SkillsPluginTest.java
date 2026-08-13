@@ -105,6 +105,31 @@ class SkillsPluginTest {
     }
 
     @Test
+    @DisplayName("one unreadable SKILL.md is skipped with a warning — the session still starts and other skills load")
+    void should_survive_an_unreadable_skill_file() throws IOException {
+        // Given: a healthy skill and one whose file cannot be read
+        writeSkill(projectDirectory, "healthy", "---\nname: healthy\ndescription: Works.\n---\nbody");
+        writeSkill(projectDirectory, "broken", "---\nname: broken\ndescription: Broken.\n---\nbody");
+        final java.nio.file.Path unreadable = projectDirectory.resolve(".coder/skills/broken/SKILL.md");
+        java.nio.file.Files.setPosixFilePermissions(unreadable, java.util.Set.of());
+        final ScriptedClient client = new ScriptedClient(List.of(ScriptedClient.textStep("hi")));
+
+        try {
+            // When
+            runTurn(client);
+        } finally {
+            java.nio.file.Files.setPosixFilePermissions(unreadable, java.util.Set.of(java.nio.file.attribute.PosixFilePermission.OWNER_READ, java.nio.file.attribute.PosixFilePermission.OWNER_WRITE));
+        }
+
+        // Then: the healthy skill is listed, the broken one absent, and startup survived
+        final ToolSchema tool = client.requests().getFirst().tools().stream()
+                .filter(schema -> schema.name().equals("skill"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(tool.description()).contains("healthy").doesNotContain("broken:");
+    }
+
+    @Test
     @DisplayName("with no skills anywhere, no skill tool is registered")
     void should_register_nothing_without_skills() {
         // Given

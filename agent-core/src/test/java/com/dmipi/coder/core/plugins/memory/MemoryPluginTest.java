@@ -48,6 +48,27 @@ class MemoryPluginTest {
     private final JacksonToolParamsParser parser = new JacksonToolParamsParser(JsonMapper.builder().build());
 
     @Test
+    @DisplayName("an unreadable memory file degrades to a visible note — the session still starts")
+    void should_survive_an_unreadable_memory_file() throws IOException {
+        // Given: a project memory file with no read permission
+        final Path memory = projectDirectory.resolve("CODER.md");
+        Files.writeString(memory, "secret rules");
+        Files.setPosixFilePermissions(memory, java.util.Set.of());
+        final ScriptedClient client = new ScriptedClient(List.of(ScriptedClient.textStep("hi")));
+
+        try {
+            // When
+            runTurn(client, new ScriptedHil(List.of()), Mode.DEFAULT);
+        } finally {
+            Files.setPosixFilePermissions(memory, java.util.Set.of(java.nio.file.attribute.PosixFilePermission.OWNER_READ, java.nio.file.attribute.PosixFilePermission.OWNER_WRITE));
+        }
+
+        // Then: startup survived, and the instructions say what could not be read
+        assertThat(client.requests().getFirst().messages().getFirst().content())
+                .contains("project memory file could not be read");
+    }
+
+    @Test
     @DisplayName("a read→save round-trip preserves @import lines instead of baking the imported content in")
     void should_round_trip_imports_unflattened() throws IOException {
         // Given: a project memory importing a rules file

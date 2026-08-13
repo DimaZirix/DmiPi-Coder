@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -18,6 +19,7 @@ import java.util.regex.Pattern;
  */
 final class SkillLibrary {
 
+    private static final Logger LOGGER = Logger.getLogger(SkillLibrary.class.getName());
     private static final String SKILLS_LOCATION = ".coder/skills";
     private static final String SKILL_FILE = "SKILL.md";
     private static final Pattern FRONTMATTER = Pattern.compile("\\A---\\s*\\n(.*?)\\n---\\s*\\n?", Pattern.DOTALL);
@@ -46,8 +48,14 @@ final class SkillLibrary {
             final String location = SKILLS_LOCATION + "/" + directory;
             final Path skillFile = files.resolve(location + "/" + SKILL_FILE);
             if (files.exists(skillFile)) {
-                final Skill skill = parse(directory, files.read(skillFile), location);
-                byName.put(skill.name(), skill);
+                try {
+                    // The directory is recorded absolute: a user-scope skill's files do not live
+                    // under the project, so a project-relative label would send the model astray.
+                    final Skill skill = parse(directory, files.read(skillFile), files.resolve(location).toString());
+                    byName.put(skill.name(), skill);
+                } catch (final RuntimeException unreadable) {
+                    LOGGER.warning("Skill '" + directory + "' could not be loaded; skipping it: " + unreadable.getMessage());
+                }
             }
         }
     }
