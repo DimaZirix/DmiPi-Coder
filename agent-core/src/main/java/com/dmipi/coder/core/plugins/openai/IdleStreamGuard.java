@@ -15,26 +15,27 @@ final class IdleStreamGuard extends FilterInputStream {
 
     private static final long CHECK_INTERVAL_MILLIS = 1_000;
 
-    private final long idleMillis;
+    private final long idleNanos;
     private final Thread watchdog;
-    private volatile long lastActivityMillis;
+    // nanoTime, not wall clock: an NTP step must neither suppress the guard nor trip it spuriously.
+    private volatile long lastActivityNanos;
     private volatile boolean stopped;
 
     IdleStreamGuard(final InputStream in, final Duration idle) {
         super(in);
-        this.idleMillis = idle.toMillis();
-        this.lastActivityMillis = System.currentTimeMillis();
+        this.idleNanos = idle.toNanos();
+        this.lastActivityNanos = System.nanoTime();
         this.watchdog = Thread.ofVirtual().name("llm-idle-guard").start(this::watch);
     }
 
     private void watch() {
         while (!stopped) {
             try {
-                Thread.sleep(Math.min(idleMillis, CHECK_INTERVAL_MILLIS));
+                Thread.sleep(Math.min(idleNanos / 1_000_000, CHECK_INTERVAL_MILLIS));
             } catch (final InterruptedException interrupted) {
                 return;
             }
-            if (!stopped && System.currentTimeMillis() - lastActivityMillis > idleMillis) {
+            if (!stopped && System.nanoTime() - lastActivityNanos > idleNanos) {
                 try {
                     in.close();
                 } catch (final IOException ignored) {
@@ -48,14 +49,14 @@ final class IdleStreamGuard extends FilterInputStream {
     @Override
     public int read() throws IOException {
         final int b = super.read();
-        lastActivityMillis = System.currentTimeMillis();
+        lastActivityNanos = System.nanoTime();
         return b;
     }
 
     @Override
     public int read(final byte[] buffer, final int offset, final int length) throws IOException {
         final int n = super.read(buffer, offset, length);
-        lastActivityMillis = System.currentTimeMillis();
+        lastActivityNanos = System.nanoTime();
         return n;
     }
 

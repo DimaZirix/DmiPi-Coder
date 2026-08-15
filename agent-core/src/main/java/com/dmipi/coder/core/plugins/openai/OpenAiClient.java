@@ -117,7 +117,7 @@ final class OpenAiClient implements LlmClient {
         try {
             return OpenAiJson.emitChunk(mapper.readTree(payload), events);
         } catch (final JacksonException invalid) {
-            throw new LlmException("Model '" + declaration.name() + "' sent an unparsable stream chunk: " + payload);
+            throw new LlmException("Model '" + declaration.name() + "' sent an unparsable stream chunk: " + payload, invalid);
         }
     }
 
