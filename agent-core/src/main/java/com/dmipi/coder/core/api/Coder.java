@@ -179,6 +179,21 @@ public final class Coder implements AutoCloseable {
         return sessions;
     }
 
+    /**
+     * The Hil handed to plugins enforces {@link com.dmipi.coder.core.domain.hil.Question#rejection}
+     * mechanically — the domain promises askers a closed answer set, so a misbehaving front-end
+     * fails here, loudly, instead of leaking an invalid selection into plugin code.
+     */
+    private static Hil validatingHil(final Hil hil) {
+        return question -> {
+            final var answer = hil.ask(question);
+            question.rejection(answer).ifPresent(reason -> {
+                throw new IllegalStateException("The front-end returned an invalid answer to '" + question.question() + "': " + reason);
+            });
+            return answer;
+        };
+    }
+
     /** Collects the configuration; {@link #build()} assembles and installs everything. */
     public static final class Builder {
 
@@ -414,7 +429,7 @@ public final class Coder implements AutoCloseable {
             final List<List<Tool>> toolsByPlugin = new ArrayList<>();
             for (final Plugin plugin : plugins) {
                 final int before = catalog.tools().size();
-                final Capabilities granted = new Capabilities(hil, text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), new AnchoredFileSystem(userDirectory), http, lateBound.shell(), conversationsEngine.forPlugin(toolsByPlugin.size()), modesCapability(gate));
+                final Capabilities granted = new Capabilities(validatingHil(hil), text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), new AnchoredFileSystem(userDirectory), http, lateBound.shell(), conversationsEngine.forPlugin(toolsByPlugin.size()), modesCapability(gate));
                 plugin.install(catalog, granted.restrictedTo(plugin.requires()));
                 toolsByPlugin.add(catalog.tools().subList(before, catalog.tools().size()));
             }

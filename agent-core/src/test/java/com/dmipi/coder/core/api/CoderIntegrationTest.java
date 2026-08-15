@@ -135,6 +135,41 @@ class CoderIntegrationTest {
     }
 
     @Test
+    @DisplayName("the Hil capability rejects an invalid front-end answer loudly — plugins can rely on the closed option set")
+    void should_validate_hil_answers_for_plugins() {
+        // Given: a plugin holding HIL, and a front-end answering with an id the question never offered
+        final com.dmipi.coder.core.domain.hil.Hil[] granted = new com.dmipi.coder.core.domain.hil.Hil[1];
+        final Plugin hilHolder = new Plugin() {
+
+            @Override
+            public java.util.Set<CapabilityType> requires() {
+                return java.util.Set.of(CapabilityType.HIL);
+            }
+
+            @Override
+            public void install(final PluginRegistrar registrar, final Capabilities capabilities) {
+                granted[0] = capabilities.hil();
+            }
+        };
+        Coder.builder()
+                .out(out)
+                .hil(new ScriptedHil(List.of(Answer.of("bogus-id"))))
+                .model(MODEL)
+                .registerPlugin(toolPlugin(new ScriptedClient(List.of()), PermissionDecision.ALLOW))
+                .registerPlugin(hilHolder)
+                .build();
+        final com.dmipi.coder.core.domain.hil.Question question = new com.dmipi.coder.core.domain.hil.Question(
+                "Pick one", "", com.dmipi.coder.core.domain.hil.QuestionKind.OPTION_LIST,
+                List.of(new com.dmipi.coder.core.domain.hil.Option("a", "A"), new com.dmipi.coder.core.domain.hil.Option("b", "B")));
+
+        // When / Then
+        assertThatIllegalStateException()
+                .isThrownBy(() -> granted[0].ask(question))
+                .withMessageContaining("invalid answer")
+                .withMessageContaining("bogus-id");
+    }
+
+    @Test
     @DisplayName("a cancel during one tool call stops the rest of the step — no post-cancel prompts, no post-cancel execution")
     void should_not_gate_or_run_tool_calls_after_a_cancel() {
         // Given: one step requesting two calls; the first cancels the turn, the second would ask
