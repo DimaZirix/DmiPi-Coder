@@ -73,7 +73,7 @@ enum SlashCommand {
                 try {
                     command.run(trimmed.substring(command.keyword.length()).strip(), coder, out);
                 } catch (final RuntimeException failure) {
-                    out.println("(command failed: " + failure.getMessage() + ")");
+                    out.println("(" + command.keyword + " failed: " + (failure.getMessage() != null ? failure.getMessage() : failure.toString()) + ")");
                 }
                 out.flush();
                 return true;
@@ -82,8 +82,10 @@ enum SlashCommand {
         return false;
     }
 
+    /** True for {@code /exit}, with or without trailing text — "/exit now" must exit, not vanish. */
     static boolean isExit(final String line) {
-        return line.strip().equals(EXIT.keyword);
+        final String trimmed = line.strip();
+        return trimmed.equals(EXIT.keyword) || trimmed.startsWith(EXIT.keyword + " ");
     }
 
     static List<String> keywords() {

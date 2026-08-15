@@ -95,6 +95,35 @@ class ConsoleDriverTest {
     }
 
     @Test
+    @DisplayName("/exit with trailing text exits — it is not silently swallowed")
+    void should_exit_on_exit_with_arguments() {
+        // Given: '/exit now', followed by a prompt that must never run
+        final RecordingProvider provider = new RecordingProvider(reply("never"));
+        final Coder coder = coderWith(provider, FAST);
+
+        // When
+        new Console(coder, reader("/exit now\nshould not run\n"), new PrintWriter(out), null).run();
+
+        // Then
+        assertThat(provider.sawAnyRequest()).isFalse();
+        coder.close();
+    }
+
+    @Test
+    @DisplayName("a failed command names the command, not just the reason")
+    void should_name_the_failed_command() {
+        // Given: resuming a session that does not exist
+        final Coder coder = coder(reply("unused"));
+
+        // When
+        new Console(coder, reader("/resume no-such-session\n/exit\n"), new PrintWriter(out), null).run();
+
+        // Then
+        assertThat(out.toString()).contains("(/resume failed:").contains("no-such-session");
+        coder.close();
+    }
+
+    @Test
     @DisplayName("an interrupt during a turn cancels it; idle, the interrupt means exit")
     void should_cancel_the_running_turn_on_interrupt() throws InterruptedException {
         // Given: a model that streams only once cancelled, so the turn blocks until Ctrl+C
