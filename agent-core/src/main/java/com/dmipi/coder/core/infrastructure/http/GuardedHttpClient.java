@@ -18,9 +18,11 @@ import java.util.Optional;
 import java.util.function.Predicate;
 
 /**
- * The core's http capability. Every hop — the initial URL and each redirect — is screened:
- * http(s) only, no private/link-local/unresolvable hosts. Redirects are followed manually and
- * bounded; the body is read up to a byte cap and decoded by the response charset.
+ * The core's http capability. On a fetch, every hop — the initial URL and each redirect — is
+ * screened: http(s) only, no private/link-local/unresolvable hosts. Redirects are followed
+ * manually and bounded; the body is read up to a byte cap and decoded by the response charset.
+ * A {@link #post} checks the scheme only — deliberately: posts carry MCP and LLM traffic, which
+ * routinely targets localhost endpoints the fetch screen exists to refuse.
  *
  * <p>Honest limit: the screen resolves DNS separately from the connection, which resolves
  * again — a DNS-rebinding attacker keeps that TOCTOU window; {@code java.net.http} offers no
@@ -68,7 +70,8 @@ public final class GuardedHttpClient implements Http {
             Thread.currentThread().interrupt();
             throw new UncheckedIOException("Interrupted while posting to " + url + ".", new IOException(interrupted));
         } catch (final IllegalArgumentException invalid) {
-            throw new UncheckedIOException("Not a postable URL: " + url, new IOException(invalid));
+            // Raised by a malformed URL or by a restricted header name — report what was said, not a guess.
+            throw new UncheckedIOException("Could not post to " + url + ": " + invalid.getMessage(), new IOException(invalid));
         }
     }
 

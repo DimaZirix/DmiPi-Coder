@@ -53,8 +53,13 @@ final class PodmanSandbox implements Sandbox {
         return argv;
     }
 
+    /** --mount instead of -v: a path containing ':' breaks the -v spec; a comma breaks both, so it is refused loudly. */
     private static void mount(final List<String> argv, final Path writable) {
-        argv.addAll(List.of("-v", writable + ":" + writable + ":rw"));
+        final String path = writable.toString();
+        if (path.contains(",")) {
+            throw new IllegalArgumentException("The mount path '" + path + "' contains a comma, which podman's mount syntax cannot carry.");
+        }
+        argv.addAll(List.of("--mount", "type=bind,source=" + path + ",destination=" + path));
     }
 
     @Override

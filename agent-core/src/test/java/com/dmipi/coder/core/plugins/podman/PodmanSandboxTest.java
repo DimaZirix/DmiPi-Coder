@@ -33,8 +33,8 @@ class PodmanSandboxTest {
 
         // Then
         assertThat(argv).startsWith("podman", "run", "--rm", "-i", "--userns=keep-id");
-        assertThat(argv).containsSequence("-v", projectDirectory + ":" + projectDirectory + ":rw");
-        assertThat(argv).containsSequence("-v", additionalDirectory + ":" + additionalDirectory + ":rw");
+        assertThat(argv).containsSequence("--mount", "type=bind,source=" + projectDirectory + ",destination=" + projectDirectory);
+        assertThat(argv).containsSequence("--mount", "type=bind,source=" + additionalDirectory + ",destination=" + additionalDirectory);
         assertThat(argv).containsSequence("--workdir", projectDirectory.toString(), "example/image:tag");
         assertThat(argv).endsWith("/bin/sh", "-c", "echo hi");
     }
