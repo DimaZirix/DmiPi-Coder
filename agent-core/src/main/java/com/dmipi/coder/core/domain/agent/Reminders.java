@@ -27,10 +27,10 @@ public final class Reminders {
             throw new IllegalArgumentException("The reminder interval must be positive, got " + interval + ".");
         }
         this.interval = interval;
-        this.rulesRefresher = rulesRefresher;
-        this.planNotice = planNotice;
-        this.mode = mode;
-        this.today = today;
+        this.rulesRefresher = java.util.Objects.requireNonNull(rulesRefresher, "rulesRefresher");
+        this.planNotice = java.util.Objects.requireNonNull(planNotice, "planNotice");
+        this.mode = java.util.Objects.requireNonNull(mode, "mode");
+        this.today = java.util.Objects.requireNonNull(today, "today");
     }
 
     /**

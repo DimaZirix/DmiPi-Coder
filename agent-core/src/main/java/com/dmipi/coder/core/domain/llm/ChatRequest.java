@@ -29,9 +29,4 @@ public record ChatRequest(List<ChatMessage> messages, List<ToolSchema> tools, bo
     public ChatRequest asControlCall(final String responseSchemaJson) {
         return new ChatRequest(messages, tools, true, Optional.of(responseSchemaJson));
     }
-
-    /** This request with thinking suppressed. */
-    public ChatRequest withoutThinking() {
-        return new ChatRequest(messages, tools, true, responseSchemaJson);
-    }
 }

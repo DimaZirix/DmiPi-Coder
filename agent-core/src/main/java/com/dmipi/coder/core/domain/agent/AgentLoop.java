@@ -59,14 +59,14 @@ public final class AgentLoop {
     }
 
     private AgentLoop(final Conversation conversation, final Supplier<LlmClient> client, final ToolRegistry tools, final ToolGate gate, final ToolParamsParser paramsParser, final Out out, final int maxStepsPerTurn, final LoopGuards guards) {
-        this.conversation = conversation;
-        this.client = client;
-        this.tools = tools;
-        this.gate = gate;
-        this.paramsParser = paramsParser;
-        this.out = out;
+        this.conversation = java.util.Objects.requireNonNull(conversation, "conversation");
+        this.client = java.util.Objects.requireNonNull(client, "client");
+        this.tools = java.util.Objects.requireNonNull(tools, "tools");
+        this.gate = java.util.Objects.requireNonNull(gate, "gate");
+        this.paramsParser = java.util.Objects.requireNonNull(paramsParser, "paramsParser");
+        this.out = java.util.Objects.requireNonNull(out, "out");
         this.maxStepsPerTurn = maxStepsPerTurn;
-        this.guards = guards;
+        this.guards = java.util.Objects.requireNonNull(guards, "guards");
     }
 
     /** Runs one full turn for the user input; the conversation stays usable whatever the ending. */

@@ -58,7 +58,6 @@ public final class Coder implements AutoCloseable {
     private final AgentLoop agentLoop;
     private final ModelRegistry models;
     private final PermissionGate gate;
-    private final Out out;
     private final In in;
     private final AutoCloseable sessionShell;
     private final Conversation conversation;
@@ -66,11 +65,10 @@ public final class Coder implements AutoCloseable {
     private final String fingerprint;
     private volatile CancelToken currentTurn;
 
-    private Coder(final AgentLoop agentLoop, final ModelRegistry models, final PermissionGate gate, final Out out, final In in, final AutoCloseable sessionShell, final Conversation conversation, final SessionStore sessions, final String fingerprint) {
+    private Coder(final AgentLoop agentLoop, final ModelRegistry models, final PermissionGate gate, final In in, final AutoCloseable sessionShell, final Conversation conversation, final SessionStore sessions, final String fingerprint) {
         this.agentLoop = agentLoop;
         this.models = models;
         this.gate = gate;
-        this.out = out;
         this.in = in;
         this.sessionShell = sessionShell;
         this.conversation = conversation;
@@ -262,13 +260,13 @@ public final class Coder implements AutoCloseable {
 
         /** The per-user anchor; conventional user-scope locations derive from it. */
         public Builder userDirectory(final Path userDirectory) {
-            this.userDirectory = userDirectory.toAbsolutePath().normalize();
+            this.userDirectory = Objects.requireNonNull(userDirectory, "userDirectory").toAbsolutePath().normalize();
             return this;
         }
 
         /** The current path — the project worked on; the anchor for project-scope locations. */
         public Builder projectDirectory(final Path projectDirectory) {
-            this.projectDirectory = projectDirectory.toAbsolutePath().normalize();
+            this.projectDirectory = Objects.requireNonNull(projectDirectory, "projectDirectory").toAbsolutePath().normalize();
             return this;
         }
 
@@ -436,7 +434,7 @@ public final class Coder implements AutoCloseable {
             final LoopGuards guards = new LoopGuards(contextManager, nextSpeaker, resolveReminders(gate));
             final AgentLoop loop = new AgentLoop(conversation, registry, toolRegistry, gate, paramsParser, out, maxStepsPerTurn, guards);
             final SessionStore sessions = sessionsGranted ? new SessionStore(projectDirectory.resolve(".coder/sessions")) : null;
-            return new Coder(loop, registry, gate, out, in, sessionShell, conversation, sessions, fingerprint(toolRegistry, registry, environment));
+            return new Coder(loop, registry, gate, in, sessionShell, conversation, sessions, fingerprint(toolRegistry, registry, environment));
         }
 
         /** A stable hash of the prompt/tool inputs; a resumed session with the same fingerprint can replay its saved prompt. */

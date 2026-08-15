@@ -9,6 +9,9 @@ import com.dmipi.coder.core.domain.llm.ModelRegistry;
 import com.dmipi.coder.core.domain.llm.Role;
 import com.dmipi.coder.core.domain.llm.ToolCall;
 import java.util.List;
+import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Keeps the conversation inside the active model's window. The budget is approximate (chars/4)
@@ -22,7 +25,7 @@ public final class ContextManager {
     private static final int CHARS_PER_TOKEN = 4;
     private static final int KEEP_RECENT_MESSAGES = 8;
     private static final String SUMMARY_MARKER = "[State snapshot of the earlier conversation — the history above it was compacted away.]\n";
-    private static final java.util.regex.Pattern SNAPSHOT = java.util.regex.Pattern.compile("(?s)<state_snapshot>(.*)</state_snapshot>");
+    private static final Pattern SNAPSHOT = Pattern.compile("(?s)<state_snapshot>(.*)</state_snapshot>");
 
     private final ModelRegistry models;
     private final double threshold;
@@ -34,10 +37,10 @@ public final class ContextManager {
         if (threshold <= 0 || threshold > 1) {
             throw new IllegalArgumentException("The compaction threshold must be in (0, 1], got " + threshold + ".");
         }
-        this.models = models;
+        this.models = Objects.requireNonNull(models, "models");
         this.threshold = threshold;
-        this.out = out;
-        this.summaryInstructions = summaryInstructions;
+        this.out = Objects.requireNonNull(out, "out");
+        this.summaryInstructions = Objects.requireNonNull(summaryInstructions, "summaryInstructions");
     }
 
     /** Compacts when the approximate budget crosses the threshold; throws when even compaction cannot fit the history. */
@@ -103,7 +106,7 @@ public final class ContextManager {
 
     /** The state snapshot inside the markers, or the whole reply when the model did not wrap it. */
     private static String snapshot(final String reply) {
-        final java.util.regex.Matcher matcher = SNAPSHOT.matcher(reply);
+        final Matcher matcher = SNAPSHOT.matcher(reply);
         return matcher.find() ? matcher.group(1).strip() : reply;
     }
 

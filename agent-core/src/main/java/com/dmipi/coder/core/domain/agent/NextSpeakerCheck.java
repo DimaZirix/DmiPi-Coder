@@ -28,7 +28,7 @@ public final class NextSpeakerCheck {
     private final ModelRegistry models;
 
     public NextSpeakerCheck(final ModelRegistry models) {
-        this.models = models;
+        this.models = java.util.Objects.requireNonNull(models, "models");
     }
 
     /** True when the fast tier judges that the agent itself should continue. */
