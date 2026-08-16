@@ -1,6 +1,7 @@
 package com.dmipi.coder.core.api;
 
 import com.dmipi.coder.core.application.permissions.PermissionGate;
+import com.dmipi.coder.core.application.prompt.CorePrompt;
 import com.dmipi.coder.core.application.prompt.EnvironmentFacts;
 import com.dmipi.coder.core.application.prompt.PromptAssembler;
 import com.dmipi.coder.core.application.prompt.PromptResources;
@@ -233,6 +234,11 @@ public final class Coder implements AutoCloseable {
         public Builder instructions(final String instructions) {
             this.instructions = Objects.requireNonNull(instructions, "instructions");
             return this;
+        }
+
+        /** The bundled standard instruction set — what a front-end uses unless it brings its own. */
+        public Builder standardInstructions() {
+            return instructions(CorePrompt.standard());
         }
 
         public Builder in(final In in) {

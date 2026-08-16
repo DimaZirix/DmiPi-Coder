@@ -1,7 +1,6 @@
 package com.dmipi.coder.console;
 
 import com.dmipi.coder.core.api.Coder;
-import com.dmipi.coder.core.application.prompt.CorePrompt;
 import com.dmipi.coder.core.domain.llm.ModelDeclaration;
 import com.dmipi.coder.core.domain.llm.Tier;
 import com.dmipi.coder.core.plugins.bubblewrap.BubblewrapSandboxPlugin;
@@ -53,7 +52,7 @@ public final class ConsoleMain {
                     .out(renderer)
                     .subagentOut(renderer.forSubagents())
                     .hil(new ConsoleHil(input, output))
-                    .instructions(CorePrompt.standard())
+                    .standardInstructions()
                     .projectDirectory(project)
                     .gatherEnvironment()
                     .workedExamples()
