@@ -109,7 +109,7 @@ final class GrepTool implements Tool {
             if (subtree.isPresent() && !file.startsWith(subtree.orElseThrow())) {
                 continue;
             }
-            if (!collectMatches(file, pattern, hits, limit)) {
+            if (!collectMatches(file, pattern, hits, limit, cancel)) {
                 skipped++;
             }
         }
@@ -125,7 +125,7 @@ final class GrepTool implements Tool {
         final String header = "Found " + hits.size() + (capped ? "+" : "") + " matching line(s) for \"" + patternText + "\":\n";
         final StringBuilder footer = new StringBuilder();
         if (capped) {
-            footer.append("\n[stopped at ").append(limit).append(" matches; narrow the pattern or raise 'limit']");
+            footer.append("\n[reached the ").append(limit).append("-match limit — more may exist; narrow the pattern or raise 'limit']");
         }
         if (skipped > 0) {
             footer.append("\n[").append(skipped).append(" file(s) skipped (unreadable, binary, or over 1 MB)]");
@@ -134,7 +134,7 @@ final class GrepTool implements Tool {
     }
 
     /** Collects a file's matches; returns false when the file was skipped (oversized, binary, or unreadable). */
-    private boolean collectMatches(final Path file, final Pattern pattern, final List<String> hits, final int limit) {
+    private boolean collectMatches(final Path file, final Pattern pattern, final List<String> hits, final int limit, final CancelToken cancel) {
         final String content;
         try {
             if (files.size(file) > MAX_FILE_BYTES) {
@@ -146,6 +146,9 @@ final class GrepTool implements Tool {
         }
         final List<String> lines = content.lines().toList();
         for (int line = 0; line < lines.size() && hits.size() < limit; line++) {
+            if ((line & 0xFF) == 0 && cancel.isCancelled()) {
+                return true;
+            }
             if (pattern.matcher(lines.get(line)).find()) {
                 hits.add(file + ":" + (line + 1) + ": " + lines.get(line).strip());
             }

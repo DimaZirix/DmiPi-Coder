@@ -87,7 +87,7 @@ class SearchToolsTest {
         final ToolResult limited = tool.execute(params("{\"pattern\": \"class \\\\w+\", \"limit\": 1}"), new CancelToken());
 
         // Then
-        assertThat(limited.llmContent()).contains("Found 1+ matching").contains("stopped at 1 matches");
+        assertThat(limited.llmContent()).contains("Found 1+ matching").contains("reached the 1-match limit — more may exist");
     }
 
     @Test

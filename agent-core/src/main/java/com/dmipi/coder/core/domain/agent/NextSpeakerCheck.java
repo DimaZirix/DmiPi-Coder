@@ -15,6 +15,8 @@ import java.util.Locale;
  */
 public final class NextSpeakerCheck {
 
+    private static final java.util.logging.Logger LOGGER = java.util.logging.Logger.getLogger(NextSpeakerCheck.class.getName());
+
     private static final String QUESTION = """
             You read the last message of a coding agent and decide who should speak next.
             Answer with a single field "next":
@@ -47,6 +49,8 @@ public final class NextSpeakerCheck {
                 }
             });
         } catch (final RuntimeException failure) {
+            // Fail-safe to "end the turn", but never invisibly — a dead fast tier should be noticed.
+            LOGGER.warning("The next-speaker control call failed; ending the turn instead of nudging: " + failure.getMessage());
             return false;
         }
         return saysModel(verdict.toString());

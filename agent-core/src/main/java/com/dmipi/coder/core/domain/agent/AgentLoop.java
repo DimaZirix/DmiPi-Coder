@@ -5,6 +5,7 @@ import com.dmipi.coder.core.domain.event.OutEvent;
 import com.dmipi.coder.core.domain.llm.ChatMessage;
 import com.dmipi.coder.core.domain.llm.ChatRequest;
 import com.dmipi.coder.core.domain.llm.LlmClient;
+import com.dmipi.coder.core.domain.llm.LlmException;
 import com.dmipi.coder.core.domain.llm.LlmStreamEvent;
 import com.dmipi.coder.core.domain.llm.ModelRegistry;
 import com.dmipi.coder.core.domain.llm.ToolCall;
@@ -215,6 +216,9 @@ public final class AgentLoop {
         }
 
         ToolCall toToolCall(final int index) {
+            if (name.isEmpty()) {
+                throw new LlmException("The model streamed tool-call fragments without a tool name (wire index " + index + ") — the provider response is malformed.");
+            }
             final String callId = id.isEmpty() ? "call_" + index : id;
             return new ToolCall(callId, name, arguments.toString());
         }

@@ -47,9 +47,6 @@ public final class Reminders {
             return messages;
         }
         final String reminder = compose(step);
-        if (reminder.isBlank()) {
-            return messages;
-        }
         final List<ChatMessage> augmented = new ArrayList<>(messages);
         augmented.set(augmented.size() - 1, new ChatMessage(last.role(), last.content() + "\n\n" + reminder, last.toolCalls(), last.toolCallId()));
         return augmented;

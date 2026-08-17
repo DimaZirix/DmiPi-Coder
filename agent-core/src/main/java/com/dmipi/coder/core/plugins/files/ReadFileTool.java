@@ -100,6 +100,9 @@ final class ReadFileTool implements Tool {
             return new ToolResult.Failure(failure.getMessage());
         }
         readTracker.markRead(path);
+        if (content.isEmpty()) {
+            return new ToolResult.Success("(the file " + params.string("path").orElseThrow() + " is empty)", new Display.Text("empty file"));
+        }
 
         final List<String> lines = content.lines().toList();
         final long offsetParam = Math.max(1, params.integer("offset").orElse(1L));
