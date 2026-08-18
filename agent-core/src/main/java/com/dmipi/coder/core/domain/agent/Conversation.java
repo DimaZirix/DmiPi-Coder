@@ -9,6 +9,8 @@ import java.util.Objects;
 /**
  * The one shared history: the system instructions first (never saved with a session — rebuilt
  * fresh), then prompts, the agent's words, tool calls and results, in order.
+ *
+ * <p>Not thread-safe — confined to the conversation's driving thread.
  */
 public final class Conversation {
 

@@ -51,7 +51,8 @@ final class PluginCatalog implements PluginRegistrar {
     }
 
     Map<Tool, PermissionPolicy> policies() {
-        return Map.copyOf(policies);
+        // Keep identity keys: Map.copyOf would switch to equals and could conflate (or refuse) distinct tools.
+        return java.util.Collections.unmodifiableMap(new java.util.IdentityHashMap<>(policies));
     }
 
     List<String> instructionSections() {

@@ -11,6 +11,9 @@ import java.util.Objects;
  * the provider speaking its protocol — no match is a startup error, not a runtime surprise.
  * Selection answers "fastest", "strongest" and "cheapest at least tier X"; ties go to
  * declaration order. The active model starts as the first declared and is switchable at runtime.
+ *
+ * <p>Thread-safety: the model map is construction-confined and immutable; the active name is a
+ * single volatile value, so {@link #activate} may be called from outside the loop thread.
  */
 public final class ModelRegistry {
 
