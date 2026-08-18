@@ -43,7 +43,7 @@ public final class ConsoleMain {
         final Path project = Path.of("").toAbsolutePath();
         final BufferedReader input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         final PrintWriter output = new PrintWriter(System.out, true, StandardCharsets.UTF_8);
-        final ConsoleRenderer renderer = new ConsoleRenderer(output);
+        final ConsoleRenderer renderer = new ConsoleRenderer(output, System.console() != null);
         final ReadTracker readTracker = new ReadTracker();
 
         final Coder coder;

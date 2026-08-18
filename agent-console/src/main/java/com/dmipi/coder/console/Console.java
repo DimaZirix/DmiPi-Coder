@@ -33,6 +33,7 @@ public final class Console {
     public void run() {
         installCancelHandler();
         output.println("Ready. Type a prompt, a /command (" + String.join(", ", SlashCommand.keywords()) + "), or /exit.");
+        offerResume();
         while (true) {
             output.print("\n> ");
             output.flush();
@@ -47,6 +48,18 @@ public final class Console {
                 continue;
             }
             runTurn(line);
+        }
+    }
+
+    /** FRONTENDS.md: resume is offered at start — saved sessions are listed, not left to be guessed. */
+    private void offerResume() {
+        try {
+            final java.util.List<String> saved = coder.sessions();
+            if (!saved.isEmpty()) {
+                output.println("Saved sessions: " + String.join(", ", saved) + " — continue one with /resume <name>.");
+            }
+        } catch (final IllegalStateException sessionsNotGranted) {
+            // No session grant, nothing to offer.
         }
     }
 
@@ -66,9 +79,9 @@ public final class Console {
         }
     }
 
-    /** A stable autosave name for a session started now, from a timestamp the caller supplies. */
+    /** A stable, fixed-width autosave name; nanosecond precision keeps two consoles from silently sharing one. */
     public static String autosaveNameFor(final LocalDateTime startedAt) {
-        return "session-" + startedAt.toString().replaceAll("[^0-9]", "-");
+        return "session-" + startedAt.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss-nnnnnnnnn"));
     }
 
     /**

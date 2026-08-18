@@ -20,28 +20,35 @@ public final class ConsoleRenderer implements Out {
 
     private final PrintWriter writer;
     private final boolean showThinking;
+    private final boolean ansi;
     private final String linePrefix;
     private final LineState state;
 
     public ConsoleRenderer(final PrintWriter writer) {
-        this(writer, false, "", new LineState());
+        this(writer, true);
     }
 
-    private ConsoleRenderer(final PrintWriter writer, final boolean showThinking, final String linePrefix, final LineState state) {
+    /** @param ansi whether to emit colour escapes — pass false when output is piped, not a terminal */
+    public ConsoleRenderer(final PrintWriter writer, final boolean ansi) {
+        this(writer, false, ansi, "", new LineState());
+    }
+
+    private ConsoleRenderer(final PrintWriter writer, final boolean showThinking, final boolean ansi, final String linePrefix, final LineState state) {
         this.writer = writer;
         this.showThinking = showThinking;
+        this.ansi = ansi;
         this.linePrefix = linePrefix;
         this.state = state;
     }
 
     /** A renderer for subagent output — every line prefixed so it reads apart from the main stream. */
     public ConsoleRenderer forSubagents() {
-        return new ConsoleRenderer(writer, showThinking, "  │ ", state);
+        return new ConsoleRenderer(writer, showThinking, ansi, "  │ ", state);
     }
 
     /** A renderer that also shows dimmed thinking, for a "show thinking" toggle. */
     public ConsoleRenderer withThinking() {
-        return new ConsoleRenderer(writer, true, linePrefix, state);
+        return new ConsoleRenderer(writer, true, ansi, linePrefix, state);
     }
 
     @Override
@@ -82,7 +89,10 @@ public final class ConsoleRenderer implements Out {
         }
     }
 
-    private static String colouredDiffLine(final String diffLine) {
+    private String colouredDiffLine(final String diffLine) {
+        if (!ansi) {
+            return diffLine;
+        }
         if (diffLine.startsWith("+") && !diffLine.startsWith("+++")) {
             return "[32m" + diffLine + "[0m";
         }
@@ -100,7 +110,10 @@ public final class ConsoleRenderer implements Out {
         };
     }
 
-    private static String dim(final String text) {
+    private String dim(final String text) {
+        if (!ansi) {
+            return text;
+        }
         return "[2m" + text + "[0m";
     }
 
