@@ -3,8 +3,8 @@ package com.dmipi.coder.core.api;
 import com.dmipi.coder.core.application.permissions.PermissionGate;
 import com.dmipi.coder.core.application.prompt.CorePrompt;
 import com.dmipi.coder.core.application.prompt.EnvironmentFacts;
-import com.dmipi.coder.core.application.prompt.PromptAssembler;
 import com.dmipi.coder.core.application.prompt.PromptResources;
+import com.dmipi.coder.core.application.prompt.SystemPromptComposer;
 import com.dmipi.coder.core.domain.agent.AgentLoop;
 import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.agent.ContextManager;
@@ -221,6 +221,7 @@ public final class Coder implements AutoCloseable {
         private boolean sessionsGranted;
         private double compactionThreshold = 0.7;
         private boolean nextSpeakerCheck;
+        private boolean built;
         private boolean gatherEnvironment;
         private EnvironmentFacts environment;
         private boolean workedExamples;
@@ -421,6 +422,10 @@ public final class Coder implements AutoCloseable {
         }
 
         public Coder build() {
+            if (built) {
+                throw new IllegalStateException("This builder already built a Coder — plugin instances are stateful; use a fresh builder per session.");
+            }
+            built = true;
             Objects.requireNonNull(out, "The out channel is required.");
             Objects.requireNonNull(hil, "The HIL channel is required.");
             if (models.isEmpty()) {
@@ -514,24 +519,13 @@ public final class Coder implements AutoCloseable {
         }
 
         private String systemInstructions(final PluginCatalog catalog, final SessionShell sessionShell, final ModelRegistry registry, final EnvironmentFacts environmentFacts) {
-            // Slot order: core → conditional (sandbox/git) → worked examples → environment → plugins.
-            return new PromptAssembler()
-                    .add(instructions)
-                    .add(sandboxSection(sessionShell))
-                    .add(gitSection())
-                    .add(examplesSection(registry))
-                    .add(environmentFacts == null ? "" : environmentFacts.render())
-                    .addAll(catalog.instructionSections())
-                    .assemble();
-        }
-
-        /** Worked examples in the active model's style, when granted; a style with no bundled resource falls back to the general workflow examples. */
-        private String examplesSection(final ModelRegistry registry) {
-            if (!workedExamples) {
-                return "";
-            }
-            final String styled = "examples-" + registry.active().declaration().promptStyle().resourceSuffix() + ".md";
-            return PromptResources.load(PromptResources.exists(styled) ? styled : "examples-general.md");
+            return SystemPromptComposer.compose(
+                    instructions,
+                    Optional.ofNullable(sessionShell).map(SessionShell::confines),
+                    isGitRepository(),
+                    workedExamples ? Optional.of(registry.active().declaration().promptStyle().resourceSuffix()) : Optional.empty(),
+                    Optional.ofNullable(environmentFacts),
+                    catalog.instructionSections());
         }
 
         /** The environment facts to render, under the gather grant or explicit override; null when neither is set. */
@@ -547,19 +541,6 @@ public final class Coder implements AutoCloseable {
                     System.getProperty("os.name", "unknown"),
                     registry.active().declaration().name(),
                     isGitRepository());
-        }
-
-        /** The sandbox section, true to reality — present only with a shell, inside vs. outside by the provider's confinement. */
-        private static String sandboxSection(final SessionShell sessionShell) {
-            if (sessionShell == null) {
-                return "";
-            }
-            return PromptResources.load(sessionShell.confines() ? "inside-sandbox.md" : "outside-sandbox.md");
-        }
-
-        /** The git section, present only when the project directory is a git repository. */
-        private String gitSection() {
-            return isGitRepository() ? PromptResources.load("git-repository.md") : "";
         }
 
         private boolean isGitRepository() {

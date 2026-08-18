@@ -25,6 +25,10 @@ import java.util.Optional;
  * registries can exist (providers and tools are what installation collects). Plugins only
  * *hold* capabilities at install and call them later, so the views bind after assembly; a call
  * before binding is an assembly bug and fails loudly.
+ *
+ * <p>Thread-safety contract: {@code bind} runs once, on the building thread, before {@code
+ * build()} returns — the individual fields are volatile for publication, not for concurrent
+ * rebinding, so capability use must start only after construction completes.
  */
 final class LateBound {
 
