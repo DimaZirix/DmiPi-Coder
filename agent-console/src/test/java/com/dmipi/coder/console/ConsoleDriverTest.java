@@ -95,6 +95,41 @@ class ConsoleDriverTest {
     }
 
     @Test
+    @DisplayName("autosave names are fixed-width and distinct down to the nanosecond")
+    void should_build_stable_autosave_names() {
+        // Given two instants differing only in nanos, one with all-zero seconds
+        final java.time.LocalDateTime plain = java.time.LocalDateTime.of(2026, 8, 9, 12, 0, 0, 0);
+        final java.time.LocalDateTime close = java.time.LocalDateTime.of(2026, 8, 9, 12, 0, 0, 7);
+
+        // When
+        final String first = Console.autosaveNameFor(plain);
+        final String second = Console.autosaveNameFor(close);
+
+        // Then: fixed width (no dropped-zero variance), distinct, and valid session names
+        assertThat(first).isEqualTo("session-2026-08-09-12-00-00-000000000");
+        assertThat(second).isEqualTo("session-2026-08-09-12-00-00-000000007");
+        assertThat(first).hasSameSizeAs(second);
+    }
+
+    @Test
+    @DisplayName("saved sessions are offered at startup with the /resume hint")
+    void should_offer_saved_sessions_at_startup() {
+        // Given: an earlier run saved a session
+        try (Coder earlier = coder(reply("noted"))) {
+            earlier.runTurn("note", new CancelToken());
+            earlier.saveSession("yesterday");
+        }
+        final Coder coder = coder(reply("unused"));
+
+        // When
+        new Console(coder, reader("/exit\n"), new PrintWriter(out), null).run();
+
+        // Then
+        assertThat(out.toString()).contains("Saved sessions: yesterday").contains("/resume <name>");
+        coder.close();
+    }
+
+    @Test
     @DisplayName("/exit with trailing text exits — it is not silently swallowed")
     void should_exit_on_exit_with_arguments() {
         // Given: '/exit now', followed by a prompt that must never run

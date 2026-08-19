@@ -146,6 +146,22 @@ class FileToolsTest {
     }
 
     @Test
+    @DisplayName("strings identical once stripping applies are refused — never a success that changed nothing")
+    void should_refuse_an_edit_that_is_a_no_op_after_stripping() throws IOException {
+        // Given: old_string pasted with numbering, new_string the same line bare
+        Files.writeString(project.resolve("f.txt"), "alpha\nbeta\ngamma");
+        final EditTool tool = new EditTool(files());
+        final ToolParams params = params("{\"path\": \"f.txt\", \"old_string\": \"     2\\tbeta\", \"new_string\": \"beta\"}");
+
+        // When / Then: preview and execution agree that nothing would change
+        assertThat(tool.preview(params)).contains("identical");
+        final ToolResult result = tool.execute(params, new CancelToken());
+        assertThat(result).isInstanceOf(ToolResult.Failure.class);
+        assertThat(result.llmContent()).contains("identical");
+        assertThat(project.resolve("f.txt")).hasContent("alpha\nbeta\ngamma");
+    }
+
+    @Test
     @DisplayName("genuine wide digits+tab data matches as written — no stripping corrupts it")
     void should_edit_wide_tab_separated_data_verbatim() throws IOException {
         // Given: a TSV line whose field is 6+ wide — exactly the shape stripping used to eat

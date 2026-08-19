@@ -354,11 +354,35 @@ class ClaudePluginInstallerPluginTest {
     }
 
     @Test
+    @DisplayName("a corrupt destination MCP config fails the install before any skill was written")
+    void should_validate_the_destination_config_before_copying_anything() throws IOException {
+        // Given: a valid plugin, but the project's own .mcp.json is broken
+        write(marketplace.resolve("skills/prompt-engineer/SKILL.md"), SKILL);
+        write(marketplace.resolve(".mcp.json"),
+                "{\"mcpServers\": {\"prompt-linter\": {\"type\": \"http\", \"url\": \"http://127.0.0.1:9/mcp\"}}}");
+        write(projectDirectory.resolve(".mcp.json"), "{broken");
+        final ScriptedClient client = new ScriptedClient(List.of(
+                ScriptedClient.toolCallStep("c1", "install_plugin", """
+                        {"source": "%s", "scope": "project"}""".formatted(marketplace)),
+                ScriptedClient.textStep("ok")));
+
+        // When
+        runTurn(client, new ScriptedHil(List.of(Answer.of("allow-once"))));
+
+        // Then: no orphaned skills, no manifest entry, and the broken config untouched
+        assertThat(client.requests().getLast().messages())
+                .anySatisfy(message -> assertThat(message.content()).contains(".mcp.json"));
+        assertThat(projectDirectory.resolve(".coder/skills")).doesNotExist();
+        assertThat(projectDirectory.resolve(".coder/installed-plugins.json")).doesNotExist();
+        assertThat(projectDirectory.resolve(".mcp.json")).hasContent("{broken");
+    }
+
+    @Test
     @DisplayName("a malformed manifest entry fails removal loudly — it never becomes a wildcard delete")
     void should_refuse_removal_on_a_malformed_manifest() throws IOException {
         // Given: a hand-broken manifest whose skill name is a number, next to an innocent skill
         write(projectDirectory.resolve(".coder/installed-plugins.json"),
-                "{\"plugins\": {\"broken\": {\"source\": \"x\", \"skills\": [1], \"mcpServers\": []}}}");
+                "{\"plugins\": {\"broken\": {\"source\": \"x\", \"skills\": [\"..\"], \"mcpServers\": []}}}");
         write(projectDirectory.resolve(".coder/skills/innocent/SKILL.md"), "keep me");
         final ScriptedClient client = new ScriptedClient(List.of(
                 ScriptedClient.toolCallStep("c1", "remove_plugin", "{\"name\": \"broken\", \"scope\": \"project\"}"),

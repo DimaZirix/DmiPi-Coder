@@ -126,8 +126,8 @@ public final class SettingsLoader {
         if (value.isMissingNode()) {
             return fallback;
         }
-        if (!value.isIntegralNumber() || value.longValue() < 0) {
-            throw new IllegalStateException("The settings file " + file + " needs a non-negative integer for '" + key + "', got " + value + ".");
+        if (!value.isIntegralNumber() || value.longValue() < 0 || value.longValue() > Integer.MAX_VALUE) {
+            throw new IllegalStateException("The settings file " + file + " needs a non-negative integer (at most " + Integer.MAX_VALUE + ") for '" + key + "', got " + value + ".");
         }
         return value.intValue();
     }

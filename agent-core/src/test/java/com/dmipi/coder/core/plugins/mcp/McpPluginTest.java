@@ -140,6 +140,20 @@ class McpPluginTest {
     }
 
     @Test
+    @DisplayName("an http server without a url fails startup naming the server")
+    void should_fail_startup_on_a_missing_url() throws IOException {
+        // Given
+        Files.writeString(projectDirectory.resolve(".mcp.json"), """
+                {"mcpServers": {"stub": {"type": "http"}}}""");
+
+        // When / Then
+        assertThatIllegalStateException()
+                .isThrownBy(() -> runTurn(new ScriptedClient(List.of(ScriptedClient.textStep("hi"))), new ScriptedHil(List.of())))
+                .withMessageContaining("stub")
+                .withMessageContaining("url");
+    }
+
+    @Test
     @DisplayName("a non-positive timeout in the config fails startup naming the server")
     void should_fail_startup_on_an_invalid_timeout() throws IOException {
         // Given

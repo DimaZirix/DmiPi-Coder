@@ -110,6 +110,9 @@ final class EditTool implements Tool {
         if (resolved.occurrences() == 0) {
             return "(old_string was not found — this edit will fail)\n" + fallbackPreview(params);
         }
+        if (resolved.oldString().equals(resolved.newString())) {
+            return "(old_string and new_string are identical once line-number prefixes are stripped — this edit will fail)";
+        }
         if (resolved.occurrences() > 1 && !params.bool("replace_all").orElse(false)) {
             return "(old_string appears " + resolved.occurrences() + " times — this edit will fail without replace_all)\n" + fallbackPreview(params);
         }
@@ -144,6 +147,9 @@ final class EditTool implements Tool {
         final Resolution resolved = resolve(content, params.string("old_string").orElseThrow(), params.string("new_string").orElseThrow());
         final String oldString = resolved.oldString();
         final String newString = resolved.newString();
+        if (oldString.equals(newString)) {
+            return new ToolResult.Failure("'old_string' and 'new_string' are identical once line-number prefixes are stripped — nothing would change.");
+        }
         if (resolved.occurrences() == 0) {
             return new ToolResult.Failure("'old_string' was not found in " + pathParam + ". Read the file and copy the text exactly, including whitespace.");
         }

@@ -19,6 +19,8 @@ import tools.jackson.databind.node.ObjectNode;
 final class InstalledPluginsRegistry {
 
     private static final String LOCATION = ".coder/installed-plugins.json";
+    /** Recorded names become deletion targets on removal — never a path, a dot-segment, or blank. */
+    private static final java.util.regex.Pattern PLAIN_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9_][A-Za-z0-9._-]*");
     private static final String PLUGINS_FIELD = "plugins";
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
@@ -94,8 +96,8 @@ final class InstalledPluginsRegistry {
         }
         final List<String> values = new ArrayList<>();
         for (final JsonNode value : array) {
-            if (!value.isString() || value.stringValue().isBlank()) {
-                throw new InstallFailure("The plugin manifest " + LOCATION + " entry '" + plugin + "' has an invalid name in '" + field + "' (" + value + "); fix the file before continuing.");
+            if (!value.isString() || !PLAIN_NAME.matcher(value.stringValue()).matches()) {
+                throw new InstallFailure("The plugin manifest " + LOCATION + " entry '" + plugin + "' has an invalid name in '" + field + "' (" + value + ") — names are plain directory/server names; fix the file before continuing.");
             }
             values.add(value.stringValue());
         }

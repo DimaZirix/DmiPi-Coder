@@ -43,6 +43,20 @@ class ConsoleRendererTest {
     }
 
     @Test
+    @DisplayName("with ANSI off, diffs and thinking render as plain text — no escape bytes for pipes")
+    void should_render_plainly_without_ansi() {
+        // Given a renderer wired for piped output
+        final ConsoleRenderer plain = new ConsoleRenderer(new PrintWriter(buffer), false);
+
+        // When
+        plain.event(new OutEvent.ActivityFinished("edit", new Display.Diff("-old\n+new")));
+        plain.withThinking().event(new OutEvent.ThinkingDelta("pondering"));
+
+        // Then
+        assertThat(buffer.toString()).contains("-old").contains("+new").contains("pondering").doesNotContain("\u001b");
+    }
+
+    @Test
     @DisplayName("an activity after unterminated streamed text starts on its own line, never glued")
     void should_break_the_line_before_an_activity() {
         // Given / When: streamed text with no trailing newline, then a tool call begins

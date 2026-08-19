@@ -35,6 +35,11 @@ final class McpServersConfig {
         return (ObjectNode) servers;
     }
 
+    /** Parses the destination config up front — a corrupt one must fail the install before any skill was written. */
+    static void validateDestination(final FileSystem destination, final String location) {
+        existingConfig(destination, destination.resolve(location), location);
+    }
+
     /** Merges every server into the config at {@code location}, returning the merged names. */
     static List<String> merge(final ObjectNode incoming, final FileSystem destination, final String location) {
         final Path file = destination.resolve(location);

@@ -18,7 +18,7 @@ public final class HardLimits {
 
     private static final List<Pattern> FORBIDDEN_COMMANDS = List.of(
             // rm with a recursive flag — short (-r, -rf, -R) or long (--recursive) — targeting the root.
-            Pattern.compile("\\brm\\s+(?:--?[\\w-]+\\s+)*(?:-\\w*[rR]\\w*|--recursive)\\s+(?:--?[\\w-]+\\s+)*[\"']?/(?:\\s|$|\\*)"),
+            Pattern.compile("\\brm\\s+(?:--?[\\w-]+\\s+)*(?:-\\w*[rR]\\w*|--recursive)\\s+(?:--?[\\w-]+\\s+)*[\"']?/+[\"']?(?:\\s|$|\\*)"),
             Pattern.compile("\\bmkfs\\b"),
             Pattern.compile("\\bdd\\b[^\\n]*\\bof=/dev/"),
             Pattern.compile(">\\s*/dev/[sh]d[a-z]"),

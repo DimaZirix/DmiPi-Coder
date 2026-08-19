@@ -56,6 +56,9 @@ final class ClaudePluginInstaller {
         final ObjectNode incomingServers = hasServers
                 ? McpServersConfig.incomingServers(source.read(join(pluginRoot, MCP_CONFIG)))
                 : null;
+        if (incomingServers != null) {
+            McpServersConfig.validateDestination(destination, scope.mcpConfigLocation());
+        }
         final Map<String, String> skillFiles = hasSkills ? readSkillFiles(pluginRoot) : Map.of();
 
         final List<String> skills = skillNames(skillFiles.keySet());

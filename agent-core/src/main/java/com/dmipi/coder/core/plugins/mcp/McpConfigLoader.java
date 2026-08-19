@@ -66,8 +66,7 @@ final class McpConfigLoader {
         }
         final JsonNode url = declaration.path("url");
         if (!url.isString() || url.stringValue().isBlank()) {
-            LOGGER.warning("MCP server '" + name + "' in " + file + " has no 'url'; skipping it.");
-            return null;
+            throw new IllegalStateException("MCP server '" + name + "' in " + file + " has no 'url'; declare one or remove the server.");
         }
         final JsonNode timeout = declaration.path("timeout");
         if (!timeout.isMissingNode() && (!timeout.isIntegralNumber() || timeout.longValue() <= 0)) {
