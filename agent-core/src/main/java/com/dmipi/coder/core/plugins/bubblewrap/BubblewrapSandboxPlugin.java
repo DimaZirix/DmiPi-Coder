@@ -6,13 +6,25 @@ import com.dmipi.coder.core.plugin.PluginRegistrar;
 
 /**
  * Contributes the {@code bubblewrap} sandbox provider — filesystem confinement via unprivileged
- * namespaces. Like every sandbox provider it is trusted computing base: configured explicitly
- * (Builder.sandbox("bubblewrap")), never auto-selected.
+ * namespaces, optionally resource-bounded via {@code systemd-run}. Like every sandbox provider
+ * it is trusted computing base: configured explicitly (Builder.sandbox("bubblewrap")), never
+ * auto-selected.
  */
 public final class BubblewrapSandboxPlugin implements Plugin {
 
+    private final ResourceLimits limits;
+
+    /** Uses {@link ResourceLimits#none()}: filesystem confinement only. */
+    public BubblewrapSandboxPlugin() {
+        this(ResourceLimits.none());
+    }
+
+    public BubblewrapSandboxPlugin(final ResourceLimits limits) {
+        this.limits = limits;
+    }
+
     @Override
     public void install(final PluginRegistrar registrar, final Capabilities capabilities) {
-        registrar.registerSandboxProvider(new BubblewrapSandboxProvider());
+        registrar.registerSandboxProvider(new BubblewrapSandboxProvider(limits));
     }
 }

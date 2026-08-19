@@ -13,7 +13,9 @@ import java.util.List;
 /**
  * Filesystem confinement with bubblewrap: the host view stays intact but read-only; writable are
  * only the project directory, the configured additional directories, and a private {@code /tmp}.
- * IPC and UTS namespaces are unshared; the process dies with the session.
+ * IPC and UTS namespaces are unshared; the process dies with the session. When resource limits
+ * are configured, the whole thing runs inside a {@code systemd-run --user --scope} so the bounds
+ * bubblewrap lacks (memory, task count) are enforced by the user's cgroup.
  *
  * <p>Honest limits (v1): the network stays shared — egress control is the core's own future
  * control point, not this provider's — and the PID namespace stays shared so the session can
@@ -22,9 +24,11 @@ import java.util.List;
 final class BubblewrapSandbox implements Sandbox {
 
     private final SandboxSpec spec;
+    private final ResourceLimits limits;
 
-    BubblewrapSandbox(final SandboxSpec spec) {
+    BubblewrapSandbox(final SandboxSpec spec, final ResourceLimits limits) {
         this.spec = spec;
+        this.limits = limits;
     }
 
     @Override
@@ -37,8 +41,8 @@ final class BubblewrapSandbox implements Sandbox {
         return ProcessRunner.start(wrapped(command), spec.projectDirectory());
     }
 
-    private List<String> wrapped(final String command) {
-        final List<String> argv = new ArrayList<>();
+    List<String> wrapped(final String command) {
+        final List<String> argv = new ArrayList<>(systemdRunPrefix());
         argv.add("bwrap");
         argv.addAll(List.of("--ro-bind", "/", "/", "--dev", "/dev", "--tmpfs", "/tmp"));
         bind(argv, spec.projectDirectory());
@@ -52,6 +56,21 @@ final class BubblewrapSandbox implements Sandbox {
 
     private static void bind(final List<String> argv, final Path writable) {
         argv.addAll(List.of("--bind", writable.toString(), writable.toString()));
+    }
+
+    private List<String> systemdRunPrefix() {
+        if (!limits.bounded()) {
+            return List.of();
+        }
+
+        final List<String> prefix = new ArrayList<>(List.of("systemd-run", "--user", "--scope", "--quiet"));
+        if (limits.limitsMemory()) {
+            prefix.addAll(List.of("-p", "MemoryMax=" + limits.memoryMax()));
+        }
+        if (limits.limitsTasks()) {
+            prefix.addAll(List.of("-p", "TasksMax=" + limits.tasksMax()));
+        }
+        return prefix;
     }
 
     @Override

@@ -7,6 +7,8 @@ import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.shell.Sandbox;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 import com.dmipi.coder.core.domain.shell.ShellResult;
+import com.dmipi.coder.core.infrastructure.shell.ProcessRunner;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -74,6 +76,71 @@ class BubblewrapSandboxTest {
         assertThat(result.succeeded()).isTrue();
         assertThat(result.stdout()).contains("x");
         assertThat(Path.of("/tmp/.dmipi-probe-tmp")).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("resource limits prefix the argv with a systemd-run scope; without limits, bwrap comes first")
+    void should_prefix_the_argv_with_systemd_run_only_when_limits_are_bounded() {
+        // Given
+        final BubblewrapSandbox limited = new BubblewrapSandbox(spec(), new ResourceLimits("512M", 64));
+        final BubblewrapSandbox unlimited = new BubblewrapSandbox(spec(), ResourceLimits.none());
+
+        // When / Then
+        assertThat(limited.wrapped("echo hi")).startsWith("systemd-run", "--user", "--scope", "--quiet", "-p", "MemoryMax=512M", "-p", "TasksMax=64", "bwrap");
+        assertThat(unlimited.wrapped("echo hi")).startsWith("bwrap");
+    }
+
+    @Test
+    @DisplayName("a command exceeding MemoryMax fails in a bounded sandbox; the same command succeeds unbounded")
+    void should_enforce_the_memory_limit_through_systemd_run() {
+        // Given
+        assumeTrue(systemdUserScopeWorks(), "systemd-run --user --scope does not work on this host");
+        final Sandbox bounded = new BubblewrapSandboxProvider(new ResourceLimits("32M", 0)).create(spec());
+        final Sandbox unbounded = provider.create(spec());
+        final String memoryHog = "head -c 64M /dev/zero | tail -c 64M > /dev/null";
+
+        // When
+        final ShellResult hogBounded = bounded.run(memoryHog, Duration.ofSeconds(30), new CancelToken());
+        final ShellResult hogUnbounded = unbounded.run(memoryHog, Duration.ofSeconds(30), new CancelToken());
+
+        // Then
+        assertThat(hogBounded.succeeded()).isFalse();
+        assertThat(hogUnbounded.succeeded()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a write to the user's home — writable on the host — fails inside the sandbox")
+    void should_refuse_a_write_to_the_users_home() {
+        // Given
+        final Path home = Path.of(System.getProperty("user.home"));
+        assumeTrue(Files.isWritable(home), "the user's home is not writable on this host");
+        final Sandbox sandbox = provider.create(spec());
+
+        // When
+        final ShellResult outside = sandbox.run("touch '" + home.resolve(".dmipi-coder-test-probe") + "'", Duration.ofSeconds(10), new CancelToken());
+
+        // Then
+        assertThat(outside.succeeded()).isFalse();
+        assertThat(home.resolve(".dmipi-coder-test-probe")).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("when the project is the user's home, the probe falls back instead of failing creation")
+    void should_fall_back_when_home_is_an_allowed_path() {
+        // Given
+        final Path home = Path.of(System.getProperty("user.home"));
+        assumeTrue(Files.isWritable(home), "the user's home is not writable on this host");
+
+        // When: home is the project directory, so a home write legitimately succeeds in the sandbox
+        final Sandbox sandbox = provider.create(new SandboxSpec(home, List.of(), Duration.ofSeconds(5), Duration.ofSeconds(120)));
+
+        // Then: creation passed the probe anyway — the probe targeted the fallback, not home
+        assertThat(sandbox.confines()).isTrue();
+    }
+
+    private static boolean systemdUserScopeWorks() {
+        final List<String> scopedTrue = List.of("systemd-run", "--user", "--scope", "--quiet", "true");
+        return ProcessRunner.run(scopedTrue, Path.of("."), Duration.ofSeconds(10), new CancelToken()).succeeded();
     }
 
     private SandboxSpec spec() {
