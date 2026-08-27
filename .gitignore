@@ -2,4 +2,4 @@ target/
 .idea/
 *.iml
 .llmcode/
-.coder/sessions/
+.coder/
