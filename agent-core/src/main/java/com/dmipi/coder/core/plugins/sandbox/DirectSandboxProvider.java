@@ -1,6 +1,7 @@
 package com.dmipi.coder.core.plugins.sandbox;
 
 import com.dmipi.coder.core.domain.shell.Sandbox;
+import com.dmipi.coder.core.domain.shell.SandboxNetwork;
 import com.dmipi.coder.core.domain.shell.SandboxProvider;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 
@@ -30,6 +31,10 @@ public final class DirectSandboxProvider implements SandboxProvider {
 
     @Override
     public Sandbox create(final SandboxSpec spec) {
+        // Honesty over convenience: silently running with the network open would pretend a contract this provider cannot enforce.
+        if (!(spec.network() instanceof SandboxNetwork.Open)) {
+            throw new IllegalStateException("The direct sandbox does not confine, so it cannot enforce the requested '" + spec.network().getClass().getSimpleName() + "' network. Configure a confining technology or leave the network open.");
+        }
         return new DirectSandbox(spec);
     }
 }

@@ -2,6 +2,7 @@ package com.dmipi.coder.core.plugins.podman;
 
 import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.shell.Sandbox;
+import com.dmipi.coder.core.domain.shell.SandboxNetwork;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 import com.dmipi.coder.core.domain.shell.ShellResult;
 import com.dmipi.coder.core.infrastructure.shell.ProcessRunner;
@@ -17,9 +18,10 @@ import java.util.List;
  * container user to the host user so files written to the mounts keep the right ownership.
  *
  * <p>Unlike bubblewrap, the host toolchain is <em>not</em> visible — the container sees only the
- * image's filesystem, so the image must carry whatever the project builds with. Honest limits
- * (v1): the container keeps podman's default (NAT'd) network; egress control is the core's own
- * future control point, not this provider's.
+ * image's filesystem, so the image must carry whatever the project builds with. An isolated
+ * network becomes {@code --network=none}; a proxied network is refused at create (the provider
+ * cannot reliably reach a loopback-bound host proxy from a rootless container). Honest limits
+ * (v1): an open network keeps podman's default (NAT'd) network.
  */
 final class PodmanSandbox implements Sandbox {
 
@@ -44,6 +46,9 @@ final class PodmanSandbox implements Sandbox {
     List<String> wrapped(final String command) {
         final List<String> argv = new ArrayList<>();
         argv.addAll(List.of("podman", "run", "--rm", "-i", "--userns=keep-id"));
+        if (spec.network() instanceof SandboxNetwork.Isolated) {
+            argv.add("--network=none");
+        }
         mount(argv, spec.projectDirectory());
         for (final Path writable : spec.additionalWritableDirectories()) {
             mount(argv, writable);

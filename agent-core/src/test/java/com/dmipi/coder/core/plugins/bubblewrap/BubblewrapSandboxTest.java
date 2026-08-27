@@ -5,9 +5,17 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.shell.Sandbox;
+import com.dmipi.coder.core.domain.shell.SandboxNetwork;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 import com.dmipi.coder.core.domain.shell.ShellResult;
 import com.dmipi.coder.core.infrastructure.shell.ProcessRunner;
+import com.dmipi.coder.core.infrastructure.shell.egress.EgressProxy;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -136,6 +144,89 @@ class BubblewrapSandboxTest {
 
         // Then: creation passed the probe anyway — the probe targeted the fallback, not home
         assertThat(sandbox.confines()).isTrue();
+    }
+
+    @Test
+    @DisplayName("the network contract translates: isolated unshares the net, proxied blackholes DNS and sets the proxy env")
+    void should_translate_the_network_contract_into_argv() {
+        // Given
+        final BubblewrapSandbox isolated = new BubblewrapSandbox(spec().withNetwork(new SandboxNetwork.Isolated()), ResourceLimits.none());
+        final BubblewrapSandbox proxied = new BubblewrapSandbox(spec().withNetwork(new SandboxNetwork.Proxied(8081, "tok")), ResourceLimits.none());
+        final BubblewrapSandbox open = new BubblewrapSandbox(spec(), ResourceLimits.none());
+
+        // When / Then
+        assertThat(isolated.wrapped("echo hi")).contains("--unshare-net");
+        assertThat(proxied.wrapped("echo hi")).containsSequence("--ro-bind", "/dev/null", "/etc/resolv.conf");
+        assertThat(proxied.wrapped("echo hi")).containsSequence("--setenv", "HTTPS_PROXY", "http://coder:tok@127.0.0.1:8081");
+        assertThat(proxied.wrapped("echo hi")).doesNotContain("--unshare-net");
+        assertThat(open.wrapped("echo hi")).doesNotContain("--unshare-net", "--setenv");
+    }
+
+    @Test
+    @DisplayName("an isolated sandbox sees only the loopback interface")
+    void should_isolate_the_network() {
+        // Given
+        final BubblewrapSandbox sandbox = new BubblewrapSandbox(spec().withNetwork(new SandboxNetwork.Isolated()), ResourceLimits.none());
+
+        // When: /proc/net reflects the reader's network namespace
+        final ShellResult interfaces = sandbox.run("cat /proc/net/dev", Duration.ofSeconds(10), new CancelToken());
+
+        // Then: loopback is the only interface
+        assertThat(interfaces.succeeded()).isTrue();
+        assertThat(interfaces.stdout().lines().filter(line -> line.contains(":")).toList())
+                .singleElement()
+                .satisfies(line -> assertThat(line).contains("lo:"));
+    }
+
+    @Test
+    @DisplayName("a proxied sandbox has its DNS blackholed and the proxy env set")
+    void should_blackhole_dns_and_set_the_proxy_environment() {
+        // Given
+        final BubblewrapSandbox sandbox = new BubblewrapSandbox(spec().withNetwork(new SandboxNetwork.Proxied(8081, "tok")), ResourceLimits.none());
+
+        // When: resolv.conf is masked by /dev/null — empty on normal hosts, unopenable in nested
+        // namespaces without device permissions; either way the host's nameservers must be gone
+        final ShellResult result = sandbox.run("cat /etc/resolv.conf 2>/dev/null; printenv HTTPS_PROXY", Duration.ofSeconds(10), new CancelToken());
+
+        // Then: no nameserver leaked through, and the proxy env is set
+        assertThat(result.succeeded()).isTrue();
+        assertThat(result.stdout().strip()).isEqualTo("http://coder:tok@127.0.0.1:8081");
+    }
+
+    @Test
+    @DisplayName("end to end: a proxied command reaches an allowed origin through the policy, and only through it")
+    void should_route_egress_through_the_proxy() throws IOException {
+        // Given: a host-side origin and a proxy allowing only it
+        assumeTrue(commandExists("curl"), "curl is not installed on this host");
+        final HttpServer origin = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        origin.createContext("/", httpExchange -> {
+            final byte[] body = "hello from origin".getBytes(StandardCharsets.US_ASCII);
+            httpExchange.sendResponseHeaders(200, body.length);
+            try (OutputStream out = httpExchange.getResponseBody()) {
+                out.write(body);
+            }
+        });
+        origin.start();
+        try (EgressProxy proxy = new EgressProxy(host -> host.equals("127.0.0.1"), "tok")) {
+            final SandboxNetwork.Proxied network = new SandboxNetwork.Proxied(proxy.port(), "tok");
+            final BubblewrapSandbox sandbox = new BubblewrapSandbox(spec().withNetwork(network), ResourceLimits.none());
+
+            // When: curl honors the proxy env the sandbox sets
+            final String originUrl = "http://127.0.0.1:" + origin.getAddress().getPort() + "/";
+            final ShellResult allowed = sandbox.run("curl -s " + originUrl, Duration.ofSeconds(15), new CancelToken());
+            final ShellResult blocked = sandbox.run("curl -s http://blocked.example/", Duration.ofSeconds(15), new CancelToken());
+
+            // Then
+            assertThat(allowed.succeeded()).isTrue();
+            assertThat(allowed.stdout()).isEqualTo("hello from origin");
+            assertThat(blocked.stdout()).contains("Blocked by the egress policy: blocked.example");
+        } finally {
+            origin.stop(0);
+        }
+    }
+
+    private static boolean commandExists(final String command) {
+        return ProcessRunner.run(List.of("sh", "-c", "command -v " + command), Path.of("."), Duration.ofSeconds(5), new CancelToken()).succeeded();
     }
 
     private static boolean systemdUserScopeWorks() {

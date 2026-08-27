@@ -1,5 +1,6 @@
 package com.dmipi.coder.core.api;
 
+import com.dmipi.coder.core.application.egress.EgressPolicy;
 import com.dmipi.coder.core.application.permissions.PermissionGate;
 import com.dmipi.coder.core.application.prompt.CorePrompt;
 import com.dmipi.coder.core.application.prompt.EnvironmentFacts;
@@ -23,6 +24,7 @@ import com.dmipi.coder.core.domain.permissions.HardLimits;
 import com.dmipi.coder.core.domain.permissions.Mode;
 import com.dmipi.coder.core.domain.permissions.PermissionRule;
 import com.dmipi.coder.core.domain.permissions.PermissionRules;
+import com.dmipi.coder.core.domain.shell.SandboxNetwork;
 import com.dmipi.coder.core.domain.shell.SandboxProvider;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 import com.dmipi.coder.core.domain.tool.Tool;
@@ -195,6 +197,20 @@ public final class Coder implements AutoCloseable {
         };
     }
 
+    /**
+     * The Hil contract promises a front-end it is never shown two questions at once. The loop
+     * thread alone kept that promise for free; egress questions arrive from proxy connection
+     * threads, so the askers now share one lock.
+     */
+    private static Hil serializedHil(final Hil hil) {
+        final Object oneQuestionAtATime = new Object();
+        return question -> {
+            synchronized (oneQuestionAtATime) {
+                return hil.ask(question);
+            }
+        };
+    }
+
     /** Collects the configuration; {@link #build()} assembles and installs everything. */
     public static final class Builder {
 
@@ -213,6 +229,8 @@ public final class Coder implements AutoCloseable {
         private String sandboxTechnology = "direct";
         private Duration shellDefaultTimeout = Duration.ofSeconds(120);
         private Duration shellMaxTimeout = Duration.ofSeconds(600);
+        private NetworkAccess networkAccess = NetworkAccess.OPEN;
+        private final List<String> allowedEgressHosts = new ArrayList<>();
         private final List<Path> additionalWritableDirectories = new ArrayList<>();
         private final List<PermissionRule> permissionRules = new ArrayList<>();
         private Http http = new GuardedHttpClient();
@@ -354,6 +372,25 @@ public final class Coder implements AutoCloseable {
             return this;
         }
 
+        /** Cuts the sandbox off the network entirely; needs a confining provider — the honest {@code direct} cannot enforce it. */
+        public Builder isolateNetwork() {
+            this.networkAccess = NetworkAccess.ISOLATED;
+            return this;
+        }
+
+        /**
+         * Routes sandboxed egress through the core's control point: the listed hosts pass
+         * (exact names, or {@code *.example.com} for any subdomain), an unknown host follows
+         * the approval mode — asking the user at connect time, with "always" and "deny"
+         * remembered for the session. Cooperative enforcement; needs a confining provider.
+         */
+        public Builder egressControl(final List<String> allowedHosts) {
+            this.networkAccess = NetworkAccess.CONTROLLED;
+            this.allowedEgressHosts.clear();
+            this.allowedEgressHosts.addAll(Objects.requireNonNull(allowedHosts, "allowedHosts"));
+            return this;
+        }
+
         /** Replaces the guarded default http capability — an embedder or test seam, not a way to relax the guards lightly. */
         public Builder http(final Http http) {
             this.http = Objects.requireNonNull(http, "http");
@@ -432,7 +469,8 @@ public final class Coder implements AutoCloseable {
                 throw new IllegalStateException("At least one model must be declared.");
             }
 
-            final PermissionGate gate = new PermissionGate(hil, mode, new PermissionRules(permissionRules), new HardLimits());
+            final Hil sharedHil = serializedHil(hil);
+            final PermissionGate gate = new PermissionGate(sharedHil, mode, new PermissionRules(permissionRules), new HardLimits());
             final LateBound lateBound = new LateBound();
             final ConversationsEngine conversationsEngine = new ConversationsEngine();
 
@@ -440,7 +478,7 @@ public final class Coder implements AutoCloseable {
             final List<List<Tool>> toolsByPlugin = new ArrayList<>();
             for (final Plugin plugin : plugins) {
                 final int before = catalog.tools().size();
-                final Capabilities granted = new Capabilities(validatingHil(hil), text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), new AnchoredFileSystem(userDirectory), http, lateBound.shell(), conversationsEngine.forPlugin(toolsByPlugin.size()), modesCapability(gate));
+                final Capabilities granted = new Capabilities(validatingHil(sharedHil), text -> out.event(new OutEvent.AnswerDelta(text)), lateBound.llms(), new Configuration(userDirectory, projectDirectory), lateBound.tools(), new AnchoredFileSystem(projectDirectory), new AnchoredFileSystem(userDirectory), http, lateBound.shell(), conversationsEngine.forPlugin(toolsByPlugin.size()), modesCapability(gate));
                 plugin.install(catalog, granted.restrictedTo(plugin.requires()));
                 toolsByPlugin.add(catalog.tools().subList(before, catalog.tools().size()));
             }
@@ -449,7 +487,7 @@ public final class Coder implements AutoCloseable {
             final ToolRegistry toolRegistry = new ToolRegistry(catalog.tools());
             catalog.policies().forEach(gate::registerPolicy);
             final JacksonToolParamsParser paramsParser = new JacksonToolParamsParser(JsonMapper.builder().build());
-            final SessionShell sessionShell = resolveShell(catalog);
+            final SessionShell sessionShell = resolveShell(catalog, gate, sharedHil);
             lateBound.bind(registry, toolRegistry, gate, paramsParser, sessionShell);
             conversationsEngine.bind(registry, gate, paramsParser, subagentOut, toolsByPlugin);
 
@@ -504,18 +542,35 @@ public final class Coder implements AutoCloseable {
         }
 
         /** Builds the session shell from the configured sandbox provider, or fails clearly when a shell-using plugin has none. */
-        private SessionShell resolveShell(final PluginCatalog catalog) {
+        private SessionShell resolveShell(final PluginCatalog catalog, final PermissionGate gate, final Hil sharedHil) {
             final Optional<SandboxProvider> provider = catalog.sandboxProviders()
                     .stream()
                     .filter(candidate -> candidate.technology().equals(sandboxTechnology))
                     .findFirst();
             if (provider.isPresent()) {
-                return new SessionShell(provider.orElseThrow(), new SandboxSpec(projectDirectory, additionalWritableDirectories, shellDefaultTimeout, shellMaxTimeout));
+                if (networkAccess != NetworkAccess.OPEN && !provider.orElseThrow().confines()) {
+                    throw new IllegalStateException("The '" + sandboxTechnology + "' sandbox does not confine, so it cannot control the network. Configure a confining technology via Builder.sandbox(...) or leave the network open.");
+                }
+                final SandboxSpec spec = new SandboxSpec(projectDirectory, additionalWritableDirectories, shellDefaultTimeout, shellMaxTimeout, initialNetwork());
+                final EgressPolicy policy = networkAccess == NetworkAccess.CONTROLLED ? new EgressPolicy(allowedEgressHosts, sharedHil, gate::mode) : null;
+                return new SessionShell(provider.orElseThrow(), spec, policy);
             }
             if (plugins.stream().anyMatch(plugin -> plugin.requires().contains(CapabilityType.SHELL))) {
                 throw new IllegalStateException("A plugin requires the shell capability, but no sandbox provider for technology '" + sandboxTechnology + "' is registered. Register a sandbox provider plugin (e.g. DirectSandboxPlugin) or set a different technology via Builder.sandbox(...).");
             }
             return null;
+        }
+
+        /** The network the spec starts with; a controlled network stays open here until the session shell starts the proxy and resolves it. */
+        private SandboxNetwork initialNetwork() {
+            return networkAccess == NetworkAccess.ISOLATED ? new SandboxNetwork.Isolated() : new SandboxNetwork.Open();
+        }
+
+        /** How the sandbox may reach the network — the closed set behind {@link #isolateNetwork()} and {@link #egressControl(List)}. */
+        private enum NetworkAccess {
+            OPEN,
+            ISOLATED,
+            CONTROLLED
         }
 
         private String systemInstructions(final PluginCatalog catalog, final SessionShell sessionShell, final ModelRegistry registry, final EnvironmentFacts environmentFacts) {

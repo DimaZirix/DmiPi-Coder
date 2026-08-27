@@ -3,8 +3,11 @@ package com.dmipi.coder.core.plugins.podman;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+
 import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.shell.Sandbox;
+import com.dmipi.coder.core.domain.shell.SandboxNetwork;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 import com.dmipi.coder.core.domain.shell.ShellResult;
 import java.nio.file.Path;
@@ -60,6 +63,19 @@ class PodmanSandboxTest {
         // Then
         assertThat(result.succeeded()).isTrue();
         assertThat(result.stdout()).contains("confined");
+    }
+
+    @Test
+    @DisplayName("an isolated network becomes --network=none; a proxied one is refused at create")
+    void should_translate_or_refuse_the_network_contract() {
+        // Given / When / Then: isolated translates
+        final PodmanSandbox isolated = new PodmanSandbox(spec().withNetwork(new SandboxNetwork.Isolated()), "example/image:tag");
+        assertThat(isolated.wrapped("echo hi")).contains("--network=none");
+
+        // Given / When / Then: proxied is refused loudly, before any probe runs
+        assertThatIllegalStateException()
+                .isThrownBy(() -> new PodmanSandboxProvider().create(spec().withNetwork(new SandboxNetwork.Proxied(8081, "tok"))))
+                .withMessageContaining("cannot route egress");
     }
 
     private SandboxSpec spec() {

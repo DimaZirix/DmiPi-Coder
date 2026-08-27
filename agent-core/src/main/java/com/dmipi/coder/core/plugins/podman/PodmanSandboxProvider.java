@@ -2,6 +2,7 @@ package com.dmipi.coder.core.plugins.podman;
 
 import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.shell.Sandbox;
+import com.dmipi.coder.core.domain.shell.SandboxNetwork;
 import com.dmipi.coder.core.domain.shell.SandboxProvider;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 import com.dmipi.coder.core.domain.shell.ShellResult;
@@ -58,6 +59,9 @@ public final class PodmanSandboxProvider implements SandboxProvider {
 
     @Override
     public Sandbox create(final SandboxSpec spec) {
+        if (spec.network() instanceof SandboxNetwork.Proxied) {
+            throw new IllegalStateException("The podman provider cannot route egress through the host-side proxy: a rootless container cannot reliably reach the loopback-bound control point. Use the bubblewrap technology for controlled egress, or isolate/open the network.");
+        }
         final PodmanSandbox sandbox = new PodmanSandbox(spec, image);
         final ShellResult probe = sandbox.run("echo probe", PROBE_TIMEOUT, new CancelToken());
         if (!probe.succeeded()) {

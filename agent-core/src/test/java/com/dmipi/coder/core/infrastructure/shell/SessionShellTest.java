@@ -2,16 +2,24 @@ package com.dmipi.coder.core.infrastructure.shell;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.dmipi.coder.core.application.egress.EgressPolicy;
 import com.dmipi.coder.core.domain.agent.CancelToken;
+import com.dmipi.coder.core.domain.permissions.Mode;
 import com.dmipi.coder.core.domain.shell.Sandbox;
+import com.dmipi.coder.core.domain.shell.SandboxNetwork;
 import com.dmipi.coder.core.domain.shell.SandboxProvider;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 import com.dmipi.coder.core.domain.shell.ShellResult;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.Socket;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -55,8 +63,76 @@ class SessionShellTest {
         assertThat(closedSandboxes).hasValue(1);
     }
 
+    @Test
+    @DisplayName("with an egress policy, the proxy starts with the sandbox, resolves the spec, and dies with the session")
+    void should_share_the_proxy_lifecycle_with_the_session() throws IOException {
+        // Given: a provider that captures the spec it is handed
+        final AtomicReference<SandboxSpec> created = new AtomicReference<>();
+        final EgressPolicy policy = new EgressPolicy(List.of(), question -> {
+            throw new AssertionError("no question expected in allow-all mode");
+        }, () -> Mode.ALLOW_ALL);
+        final SessionShell shell = new SessionShell(capturingProvider(created), spec(), policy);
+
+        // When
+        shell.run("noop", new CancelToken());
+
+        // Then: the provider received a proxied contract and the proxy is really listening
+        assertThat(created.get().network()).isInstanceOf(SandboxNetwork.Proxied.class);
+        final SandboxNetwork.Proxied proxied = (SandboxNetwork.Proxied) created.get().network();
+        assertThat(proxied.token()).isNotBlank();
+        try (Socket connection = new Socket(InetAddress.getLoopbackAddress(), proxied.port())) {
+            assertThat(connection.isConnected()).isTrue();
+        }
+
+        // When / Then: closing the session closes the proxy with it
+        shell.close();
+        assertThatThrownBy(() -> new Socket(InetAddress.getLoopbackAddress(), proxied.port()).close()).isInstanceOf(IOException.class);
+    }
+
+    @Test
+    @DisplayName("without an egress policy, the provider receives the spec's own network untouched")
+    void should_leave_the_network_untouched_without_a_policy() {
+        // Given
+        final AtomicReference<SandboxSpec> created = new AtomicReference<>();
+        final SessionShell shell = new SessionShell(capturingProvider(created), spec());
+
+        // When
+        shell.run("noop", new CancelToken());
+
+        // Then
+        assertThat(created.get().network()).isInstanceOf(SandboxNetwork.Open.class);
+        shell.close();
+    }
+
     private SandboxSpec spec() {
         return new SandboxSpec(project, List.of(), Duration.ofSeconds(5), Duration.ofSeconds(10));
+    }
+
+    private SandboxProvider capturingProvider(final AtomicReference<SandboxSpec> created) {
+        final SandboxProvider counting = countingProvider();
+        return new SandboxProvider() {
+
+            @Override
+            public String technology() {
+                return counting.technology();
+            }
+
+            @Override
+            public boolean available() {
+                return true;
+            }
+
+            @Override
+            public boolean confines() {
+                return true;
+            }
+
+            @Override
+            public Sandbox create(final SandboxSpec spec) {
+                created.set(spec);
+                return counting.create(spec);
+            }
+        };
     }
 
     private SandboxProvider countingProvider() {

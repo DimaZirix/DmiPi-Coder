@@ -22,6 +22,7 @@ import com.dmipi.coder.core.plugin.CapabilityType;
 import com.dmipi.coder.core.plugin.Plugin;
 import com.dmipi.coder.core.plugin.PluginRegistrar;
 import com.dmipi.coder.core.plugin.Tools;
+import com.dmipi.coder.core.plugins.sandbox.DirectSandboxPlugin;
 import com.dmipi.coder.core.testfixtures.RecordingOut;
 import com.dmipi.coder.core.testfixtures.ScriptedClient;
 import com.dmipi.coder.core.testfixtures.ScriptedHil;
@@ -232,6 +233,21 @@ class CoderIntegrationTest {
                 registrar.registerInstructionSection("PLUGIN SECTION");
             }
         };
+    }
+
+    @Test
+    @DisplayName("a controlled network with a non-confining sandbox is refused at build, not silently unenforced")
+    void should_refuse_egress_control_on_a_non_confining_sandbox() {
+        assertThatIllegalStateException()
+                .isThrownBy(() -> Coder.builder()
+                        .out(out)
+                        .hil(new ScriptedHil(List.of()))
+                        .model(MODEL)
+                        .registerPlugin(toolPlugin(new ScriptedClient(List.of()), PermissionDecision.ALLOW))
+                        .registerPlugin(new DirectSandboxPlugin())
+                        .egressControl(List.of("registry.npmjs.org"))
+                        .build())
+                .withMessageContaining("does not confine");
     }
 
     /** A plugin that only holds the Tools capability for later use from code. */

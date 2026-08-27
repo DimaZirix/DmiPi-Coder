@@ -1,9 +1,11 @@
 package com.dmipi.coder.core.plugins.sandbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import com.dmipi.coder.core.domain.agent.CancelToken;
 import com.dmipi.coder.core.domain.shell.Sandbox;
+import com.dmipi.coder.core.domain.shell.SandboxNetwork;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 import com.dmipi.coder.core.domain.shell.ShellResult;
 import java.io.IOException;
@@ -92,6 +94,15 @@ class DirectSandboxTest {
         // Then
         assertThat(result.timedOut()).isTrue();
         assertThat(result.stdout()).contains("early");
+    }
+
+    @Test
+    @DisplayName("a network contract it cannot enforce is refused loudly, never silently ignored")
+    void should_refuse_a_network_contract_it_cannot_enforce() {
+        final SandboxSpec isolated = new SandboxSpec(projectDirectory, List.of(), Duration.ofSeconds(5), Duration.ofSeconds(120), new SandboxNetwork.Isolated());
+        assertThatIllegalStateException()
+                .isThrownBy(() -> new DirectSandboxProvider().create(isolated))
+                .withMessageContaining("cannot enforce");
     }
 
     private Sandbox sandbox() {
