@@ -1,13 +1,14 @@
-package com.dmipi.coder.core.plugins.bubblewrap;
+package com.dmipi.coder.core.domain.shell;
 
 import java.util.Objects;
 
 /**
- * Optional resource bounds for the bubblewrap sandbox, enforced by wrapping the command in
- * {@code systemd-run --user --scope} — bubblewrap itself has no resource controls. Values use
- * systemd's own syntax: {@code memoryMax} is a size with an optional suffix ("512M", "2G") and
- * becomes {@code MemoryMax=}; {@code tasksMax} caps threads + processes in the scope and becomes
- * {@code TasksMax=}. A blank {@code memoryMax} or zero {@code tasksMax} leaves that bound off.
+ * Optional resource bounds a confining provider enforces on sandboxed commands. {@code memoryMax}
+ * is a size with an uppercase suffix ("512M", "2G") — the spelling both mechanisms accept;
+ * {@code tasksMax} caps threads + processes. Bubblewrap enforces them by wrapping the command in
+ * {@code systemd-run --user --scope} ({@code MemoryMax=}/{@code TasksMax=}); podman natively via
+ * cgroups ({@code --memory}/{@code --pids-limit}). A blank {@code memoryMax} or zero
+ * {@code tasksMax} leaves that bound off.
  */
 public record ResourceLimits(String memoryMax, int tasksMax) {
 
@@ -18,7 +19,7 @@ public record ResourceLimits(String memoryMax, int tasksMax) {
         }
     }
 
-    /** No bounds: commands run under bubblewrap alone, without a systemd-run scope. */
+    /** No bounds: the provider adds no resource flags at all. */
     public static ResourceLimits none() {
         return new ResourceLimits("", 0);
     }

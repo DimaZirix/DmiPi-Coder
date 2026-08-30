@@ -1,11 +1,12 @@
 package com.dmipi.coder.core.plugins.bubblewrap;
 
 import com.dmipi.coder.core.domain.agent.CancelToken;
+import com.dmipi.coder.core.domain.shell.ResourceLimits;
 import com.dmipi.coder.core.domain.shell.Sandbox;
 import com.dmipi.coder.core.domain.shell.SandboxProvider;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
 import com.dmipi.coder.core.domain.shell.ShellResult;
-import java.io.File;
+import com.dmipi.coder.core.infrastructure.shell.Executables;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -47,14 +48,7 @@ public final class BubblewrapSandboxProvider implements SandboxProvider {
 
     @Override
     public boolean available() {
-        return onPath("bwrap") && (!limits.bounded() || onPath("systemd-run"));
-    }
-
-    private static boolean onPath(final String executable) {
-        return Stream.of(System.getenv().getOrDefault("PATH", "").split(File.pathSeparator))
-                .filter(entry -> !entry.isBlank())
-                .map(entry -> Path.of(entry).resolve(executable))
-                .anyMatch(Files::isExecutable);
+        return Executables.onPath("bwrap") && (!limits.bounded() || Executables.onPath("systemd-run"));
     }
 
     @Override

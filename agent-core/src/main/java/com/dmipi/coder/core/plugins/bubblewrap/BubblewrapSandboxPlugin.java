@@ -1,5 +1,6 @@
 package com.dmipi.coder.core.plugins.bubblewrap;
 
+import com.dmipi.coder.core.domain.shell.ResourceLimits;
 import com.dmipi.coder.core.plugin.Capabilities;
 import com.dmipi.coder.core.plugin.Plugin;
 import com.dmipi.coder.core.plugin.PluginRegistrar;

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.dmipi.coder.core.domain.agent.CancelToken;
+import com.dmipi.coder.core.domain.shell.ResourceLimits;
 import com.dmipi.coder.core.domain.shell.Sandbox;
 import com.dmipi.coder.core.domain.shell.SandboxNetwork;
 import com.dmipi.coder.core.domain.shell.SandboxSpec;
