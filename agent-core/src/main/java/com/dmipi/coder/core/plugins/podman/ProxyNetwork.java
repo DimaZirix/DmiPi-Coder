@@ -2,34 +2,51 @@ package com.dmipi.coder.core.plugins.podman;
 
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.random.RandomGenerator;
 
 /**
  * The rootless netmode that exposes the host loopback to the container, so the core's egress
- * proxy is reachable. Both modes present the host loopback as {@link #HOST_LOOPBACK}: slirp4netns
- * exposes it there natively; pasta is told to map the same address, so the proxy URL is
- * netmode-independent. Selected by which helper binary the host actually has.
+ * proxy is reachable. Both modes present the host loopback at the same per-session
+ * {@code 10.x.y.2} address ({@link #randomHostLoopback}): pasta is told to map it directly;
+ * slirp4netns fixes the host at the {@code .2} of its subnet, so the subnet is derived from the
+ * address. Selected by which helper binary the host actually has.
  */
 enum ProxyNetwork {
 
     /** The modern default helper; the host loopback is mapped explicitly. */
-    PASTA("pasta", "--network=pasta:--map-host-loopback," + ProxyNetwork.HOST_LOOPBACK),
+    PASTA("pasta") {
+        @Override
+        String flag(final String hostLoopback) {
+            return "--network=pasta:--map-host-loopback," + hostLoopback;
+        }
+    },
 
-    /** The legacy helper; {@code allow_host_loopback} exposes the host loopback at 10.0.2.2. */
-    SLIRP4NETNS("slirp4netns", "--network=slirp4netns:allow_host_loopback=true");
-
-    /** Where the container reaches the host's loopback under either helper. */
-    static final String HOST_LOOPBACK = "10.0.2.2";
+    /** The legacy helper; {@code allow_host_loopback} exposes the host loopback at the subnet's {@code .2}. */
+    SLIRP4NETNS("slirp4netns") {
+        @Override
+        String flag(final String hostLoopback) {
+            final String subnet = hostLoopback.substring(0, hostLoopback.lastIndexOf('.'));
+            return "--network=slirp4netns:allow_host_loopback=true,cidr=" + subnet + ".0/24";
+        }
+    };
 
     private final String executable;
-    private final String flag;
 
-    ProxyNetwork(final String executable, final String flag) {
+    ProxyNetwork(final String executable) {
         this.executable = executable;
-        this.flag = flag;
     }
 
-    String flag() {
-        return flag;
+    /** The {@code --network=...} argument routing this netmode's traffic so {@code hostLoopback} reaches the host. */
+    abstract String flag(String hostLoopback);
+
+    /**
+     * A per-session address the container reaches the host's loopback at: {@code 10.x.y.2},
+     * the last octet fixed by slirp4netns's host mapping. Random so no fixed LAN address is
+     * shadowed in every session — a collision-avoidance measure, not a secret: the address is
+     * visible in the container's proxy environment, and the proxy token is the actual guard.
+     */
+    static String randomHostLoopback(final RandomGenerator random) {
+        return "10." + random.nextInt(256) + "." + random.nextInt(256) + ".2";
     }
 
     /** Prefers pasta (podman's own default), falls back to slirp4netns; empty when neither helper is installed. */

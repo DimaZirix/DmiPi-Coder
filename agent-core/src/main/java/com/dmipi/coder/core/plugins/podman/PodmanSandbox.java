@@ -23,8 +23,9 @@ import java.util.List;
  *
  * <p>Unlike bubblewrap, the host toolchain is <em>not</em> visible — the container sees only the
  * image's filesystem, so the image must carry whatever the project builds with. An isolated
- * network becomes {@code --network=none}; a proxied network rides a {@link ProxyNetwork} netmode
- * that exposes the host loopback, with DNS pointed at the container's own (empty) loopback so
+ * network becomes {@code --network=none}; a proxied network rides a {@link ProxyRoute} — a
+ * netmode exposing the host loopback at a per-session address — with DNS pointed at the
+ * container's own (empty) loopback so
  * direct-by-hostname egress is blackholed. Honest limits (v1): an open network keeps podman's
  * default (NAT'd) network, and a <em>background</em> container is not torn down by the session —
  * killing the host-side client does not stop it.
@@ -36,14 +37,14 @@ final class PodmanSandbox implements Sandbox {
     private final SandboxSpec spec;
     private final String image;
     private final ResourceLimits limits;
-    private final ProxyNetwork proxyNetwork;
+    private final ProxyRoute proxyRoute;
 
-    /** {@code proxyNetwork} is required exactly when the spec's network is proxied; null otherwise. */
-    PodmanSandbox(final SandboxSpec spec, final String image, final ResourceLimits limits, final ProxyNetwork proxyNetwork) {
+    /** {@code proxyRoute} is required exactly when the spec's network is proxied; null otherwise. */
+    PodmanSandbox(final SandboxSpec spec, final String image, final ResourceLimits limits, final ProxyRoute proxyRoute) {
         this.spec = spec;
         this.image = image;
         this.limits = limits;
-        this.proxyNetwork = proxyNetwork;
+        this.proxyRoute = proxyRoute;
     }
 
     @Override
@@ -80,16 +81,16 @@ final class PodmanSandbox implements Sandbox {
             return;
         }
         if (spec.network() instanceof SandboxNetwork.Proxied proxied) {
-            argv.add(proxyNetwork.flag());
+            argv.add(proxyRoute.flag());
             argv.addAll(List.of("--dns", "127.0.0.1"));
-            proxyEnvironment(argv, proxied);
+            proxyEnvironment(argv, proxied, proxyRoute.hostLoopback());
         }
     }
 
     /** Credentials in the URL become Proxy-Authorization in every proxy-honoring client. */
-    private static void proxyEnvironment(final List<String> argv, final SandboxNetwork.Proxied proxied) {
+    private static void proxyEnvironment(final List<String> argv, final SandboxNetwork.Proxied proxied, final String hostLoopback) {
         final String credentials = proxied.token().isEmpty() ? "" : "coder:" + proxied.token() + "@";
-        final String proxyUrl = "http://" + credentials + ProxyNetwork.HOST_LOOPBACK + ":" + proxied.port();
+        final String proxyUrl = "http://" + credentials + hostLoopback + ":" + proxied.port();
         for (final String name : List.of("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")) {
             argv.addAll(List.of("-e", name + "=" + proxyUrl));
         }

@@ -12,6 +12,7 @@ import com.dmipi.coder.core.domain.shell.ShellResult;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -80,14 +81,15 @@ class PodmanSandboxTest {
         final SandboxSpec proxied = spec().withNetwork(new SandboxNetwork.Proxied(8081, "tok"));
 
         // When
-        final List<String> pasta = sandbox(proxied, ResourceLimits.none(), ProxyNetwork.PASTA).wrapped("echo hi", Duration.ZERO);
-        final List<String> slirp = sandbox(proxied, ResourceLimits.none(), ProxyNetwork.SLIRP4NETNS).wrapped("echo hi", Duration.ZERO);
+        final List<String> pasta = sandbox(proxied, ResourceLimits.none(), new ProxyRoute(ProxyNetwork.PASTA, "10.7.8.2")).wrapped("echo hi", Duration.ZERO);
+        final List<String> slirp = sandbox(proxied, ResourceLimits.none(), new ProxyRoute(ProxyNetwork.SLIRP4NETNS, "10.7.8.2")).wrapped("echo hi", Duration.ZERO);
 
-        // Then
-        assertThat(pasta).contains("--network=pasta:--map-host-loopback,10.0.2.2");
-        assertThat(slirp).contains("--network=slirp4netns:allow_host_loopback=true");
+        // Then: pasta maps the address directly; slirp derives its subnet from it — the proxy URL is the same for both
+        assertThat(pasta).contains("--network=pasta:--map-host-loopback,10.7.8.2");
+        assertThat(slirp).contains("--network=slirp4netns:allow_host_loopback=true,cidr=10.7.8.0/24");
         assertThat(pasta).containsSequence("--dns", "127.0.0.1");
-        assertThat(pasta).containsSequence("-e", "HTTPS_PROXY=http://coder:tok@10.0.2.2:8081");
+        assertThat(pasta).containsSequence("-e", "HTTPS_PROXY=http://coder:tok@10.7.8.2:8081");
+        assertThat(slirp).containsSequence("-e", "HTTPS_PROXY=http://coder:tok@10.7.8.2:8081");
     }
 
     @Test
@@ -97,6 +99,15 @@ class PodmanSandboxTest {
         assertThat(ProxyNetwork.autoSelect(Set.of("slirp4netns")::contains)).contains(ProxyNetwork.SLIRP4NETNS);
         assertThat(ProxyNetwork.autoSelect(Set.of("pasta")::contains)).contains(ProxyNetwork.PASTA);
         assertThat(ProxyNetwork.autoSelect(executable -> false)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the per-session host-loopback address is always a 10.x.y.2 — the shape both netmodes can serve")
+    void should_generate_a_mappable_host_loopback_address() {
+        final Random random = new Random(42);
+        for (int i = 0; i < 100; i++) {
+            assertThat(ProxyNetwork.randomHostLoopback(random)).matches("10\\.\\d{1,3}\\.\\d{1,3}\\.2");
+        }
     }
 
     @Test
@@ -122,8 +133,8 @@ class PodmanSandboxTest {
         assertThat(result.stdout()).contains("confined");
     }
 
-    private static PodmanSandbox sandbox(final SandboxSpec spec, final ResourceLimits limits, final ProxyNetwork proxyNetwork) {
-        return new PodmanSandbox(spec, "example/image:tag", limits, proxyNetwork);
+    private static PodmanSandbox sandbox(final SandboxSpec spec, final ResourceLimits limits, final ProxyRoute proxyRoute) {
+        return new PodmanSandbox(spec, "example/image:tag", limits, proxyRoute);
     }
 
     private SandboxSpec spec() {

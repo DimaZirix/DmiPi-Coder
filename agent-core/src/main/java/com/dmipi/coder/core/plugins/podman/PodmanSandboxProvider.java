@@ -10,6 +10,7 @@ import com.dmipi.coder.core.domain.shell.ShellResult;
 import com.dmipi.coder.core.infrastructure.shell.Executables;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * The podman containment technology. The image carries the project's toolchain and is configured
@@ -62,7 +63,7 @@ public final class PodmanSandboxProvider implements SandboxProvider {
 
     @Override
     public Sandbox create(final SandboxSpec spec) {
-        final PodmanSandbox sandbox = new PodmanSandbox(spec, image, limits, proxyNetwork(spec));
+        final PodmanSandbox sandbox = new PodmanSandbox(spec, image, limits, proxyRoute(spec));
         final ShellResult probe = sandbox.run("echo probe", PROBE_TIMEOUT, new CancelToken());
         if (!probe.succeeded()) {
             throw new IllegalStateException("The podman sandbox cannot run the image '" + image + "' on this host: " + probe.stderr().strip());
@@ -71,11 +72,12 @@ public final class PodmanSandboxProvider implements SandboxProvider {
     }
 
     /** Required exactly when the spec is proxied; refused loudly when no loopback-exposing helper exists. */
-    private static ProxyNetwork proxyNetwork(final SandboxSpec spec) {
+    private static ProxyRoute proxyRoute(final SandboxSpec spec) {
         if (!(spec.network() instanceof SandboxNetwork.Proxied)) {
             return null;
         }
-        return ProxyNetwork.autoSelect(Executables::onPath)
+        final ProxyNetwork network = ProxyNetwork.autoSelect(Executables::onPath)
                 .orElseThrow(() -> new IllegalStateException("The podman provider cannot route egress through the host-side proxy: reaching the loopback-bound control point needs the pasta or slirp4netns helper, and neither is installed. Install one, use the bubblewrap technology, or isolate/open the network."));
+        return new ProxyRoute(network, ProxyNetwork.randomHostLoopback(ThreadLocalRandom.current()));
     }
 }
