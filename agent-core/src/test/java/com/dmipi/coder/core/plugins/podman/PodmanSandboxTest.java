@@ -102,12 +102,64 @@ class PodmanSandboxTest {
     }
 
     @Test
-    @DisplayName("the per-session host-loopback address is always a 10.x.y.2 — the shape both netmodes can serve")
+    @DisplayName("the per-session host-loopback address is always the .2 of an RFC1918 subnet — the shape both netmodes can serve")
     void should_generate_a_mappable_host_loopback_address() {
         final Random random = new Random(42);
         for (int i = 0; i < 100; i++) {
-            assertThat(ProxyNetwork.randomHostLoopback(random)).matches("10\\.\\d{1,3}\\.\\d{1,3}\\.2");
+            assertThat(ProxyNetwork.randomHostLoopback(random, List.of()))
+                    .matches("(10\\.\\d{1,3}|172\\.(1[6-9]|2\\d|3[01])|192\\.168)\\.\\d{1,3}\\.2");
         }
+    }
+
+    @Test
+    @DisplayName("a subnet the host routes is avoided: with all of 10/8 routed (a VPN), the address comes from another private range")
+    void should_avoid_subnets_the_host_routes() {
+        // Given: a VPN swallowing all of 10.0.0.0/8
+        final List<HostRoutes.Route> vpn = List.of(new HostRoutes.Route(10 << 24, 0xFF000000));
+
+        // When / Then
+        for (int i = 0; i < 100; i++) {
+            assertThat(ProxyNetwork.randomHostLoopback(new Random(i), vpn)).doesNotStartWith("10.");
+        }
+    }
+
+    @Test
+    @DisplayName("the default route is a catch-all, not an occupied subnet — it forbids nothing")
+    void should_ignore_the_default_route() {
+        final List<HostRoutes.Route> defaultOnly = List.of(new HostRoutes.Route(0, 0));
+        assertThat(ProxyNetwork.randomHostLoopback(new Random(42), defaultOnly)).startsWith("10.");
+    }
+
+    @Test
+    @DisplayName("with every private range routed, selection still returns an address — avoidance is best-effort, not a refusal")
+    void should_fall_back_when_everything_is_routed() {
+        // Given: routes covering all three RFC1918 ranges
+        final List<HostRoutes.Route> everything = List.of(
+                new HostRoutes.Route(10 << 24, 0xFF000000),
+                new HostRoutes.Route((172 << 24) | (16 << 16), 0xFFF00000),
+                new HostRoutes.Route((192 << 24) | (168 << 16), 0xFFFF0000));
+
+        // When / Then
+        assertThat(ProxyNetwork.randomHostLoopback(new Random(42), everything)).matches("10\\.\\d{1,3}\\.\\d{1,3}\\.2");
+    }
+
+    @Test
+    @DisplayName("the route table parses: little-endian hex columns become destination/mask, header and short lines skipped")
+    void should_parse_the_proc_route_table() {
+        // Given: a realistic /proc/net/route — a default route and a connected 10.0.2.0/24
+        final List<String> lines = List.of(
+                "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT",
+                "eth0\t00000000\t0102000A\t0003\t0\t0\t100\t00000000\t0\t0\t0",
+                "eth0\t0002000A\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0",
+                "");
+
+        // When
+        final List<HostRoutes.Route> routes = HostRoutes.parse(lines);
+
+        // Then
+        assertThat(routes).containsExactly(
+                new HostRoutes.Route(0, 0),
+                new HostRoutes.Route((10 << 24) | (2 << 8), 0xFFFFFF00));
     }
 
     @Test

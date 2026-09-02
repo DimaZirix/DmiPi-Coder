@@ -78,6 +78,6 @@ public final class PodmanSandboxProvider implements SandboxProvider {
         }
         final ProxyNetwork network = ProxyNetwork.autoSelect(Executables::onPath)
                 .orElseThrow(() -> new IllegalStateException("The podman provider cannot route egress through the host-side proxy: reaching the loopback-bound control point needs the pasta or slirp4netns helper, and neither is installed. Install one, use the bubblewrap technology, or isolate/open the network."));
-        return new ProxyRoute(network, ProxyNetwork.randomHostLoopback(ThreadLocalRandom.current()));
+        return new ProxyRoute(network, ProxyNetwork.randomHostLoopback(ThreadLocalRandom.current(), HostRoutes.read()));
     }
 }
