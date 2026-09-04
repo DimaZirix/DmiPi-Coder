@@ -20,33 +20,3 @@ gate that asks before doing anything risky.
 ## Build and run
 
 Needs Java 25 and Maven.
-
-```bash
-mvn test
-mvn -q -pl agent-console -am compile exec:java -Dexec.mainClass=com.dmipi.coder.console.ConsoleMain
-```
-
-Out of the box it expects a model on `http://localhost:8080/v1`. To change that, or add
-more models, drop a `.coder/settings.json` in your project or home directory:
-
-```json
-{
-  "models": [
-    {
-      "name": "local",
-      "protocol": "openai",
-      "endpoint": "http://localhost:1234/v1",
-      "tier": "fast",
-      "contextWindow": 32000
-    }
-  ]
-}
-```
-
-The same file can pick a sandbox (`"sandbox": {"technology": "bubblewrap"}`),
-set permission rules, and tune shell timeouts.
-
-## Dependencies
-
-`agent-core` sticks to well-known libraries, and only ones I've explicitly decided to
-take on. So far that's Jackson and java-diff-utils.
