@@ -6,6 +6,8 @@ Point it at an OpenAI-compatible endpoint (llama.cpp, LM Studio, vLLM, Ollama, o
 
 The coding abilities are plugins; the engine underneath is not about code. It knows a conversation loop, a permission gate, a sandbox contract and a plugin interface. Register other plugins and the same core is another kind of agent.
 
+The engine and the user interface are separate modules. `agent-core` is a library with no user interface of its own: add it to your project and drive it from your code over three channels, prompts in, events out, questions to the user. `agent-console` is one front-end built on that library, the terminal one; a web app, an IDE plugin or a CI job would be others.
+
 ## Three ideas behind it
 
 **Small enough to audit.** Fewer dependencies means less code you have to trust and fewer places for something to slip in. Almost everything comes from the JDK: HTTP through `java.net.http`, processes through `ProcessBuilder`, no framework, no dependency-injection container. On top of the JDK the engine needs exactly two libraries:
