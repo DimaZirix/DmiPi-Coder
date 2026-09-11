@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" width="1000" height="640">
+  <style>
+    .frame { fill: #ffffff; stroke: #999999; stroke-width: 1.5; }
+    .bar { fill: #e6e6e6; stroke: #999999; }
+    .panel { fill: #f7f7f7; stroke: #bbbbbb; }
+    .mono { font-family: monospace; font-size: 14px; fill: #222222; }
+    .muted { fill: #808080; }
+    .bold { font-weight: bold; }
+    .label { font-family: sans-serif; font-size: 12px; fill: #555555; }
+    .callout { stroke: #999999; stroke-dasharray: 4 3; fill: none; }
+    .titlebar { font-family: sans-serif; font-size: 13px; fill: #444444; }
+  </style>
+  <rect x="20" y="20" width="700" height="600" class="frame"/>
+  <rect x="20" y="20" width="700" height="28" class="bar"/>
+  <text x="32" y="39" class="titlebar">Terminal — coder (project: ~/work/app)</text>
+
+  <text x="32" y="80" class="mono bold">&gt; add a --dry-run flag to the deploy script</text>
+  <text x="32" y="110" class="mono">· read_file scripts/deploy.sh</text>
+  <text x="32" y="130" class="mono muted">  read 120 lines</text>
+
+  <text x="32" y="176" class="mono bold">Allow the agent to run 'edit — scripts/deploy.sh'?</text>
+  <text x="32" y="200" class="mono muted">    --- scripts/deploy.sh</text>
+  <text x="32" y="220" class="mono muted">    +++ scripts/deploy.sh</text>
+  <text x="32" y="240" class="mono muted">    @@ -10,3 +10,3 @@</text>
+  <text x="32" y="260" class="mono">    -  run_deploy</text>
+  <text x="32" y="280" class="mono">    +  [ "$DRY_RUN" ] || run_deploy</text>
+  <text x="32" y="312" class="mono">  1) Allow once</text>
+  <text x="32" y="332" class="mono">  2) Always allow edit this session</text>
+  <text x="32" y="352" class="mono">  3) Deny</text>
+  <text x="32" y="382" class="mono bold">Select (number): _</text>
+
+  <text x="32" y="430" class="mono muted">Please enter a single valid number: _</text>
+
+  <rect x="740" y="160" width="240" height="46" class="panel"/>
+  <text x="750" y="178" class="label">The question, one line: the tool and</text>
+  <text x="750" y="194" class="label">what it targets.</text>
+
+  <rect x="740" y="214" width="240" height="60" class="panel"/>
+  <text x="750" y="232" class="label">Preview, verbatim and indented: exactly</text>
+  <text x="750" y="248" class="label">what is at stake (a diff, a command line,</text>
+  <text x="750" y="264" class="label">a URL). Empty when there is nothing to show.</text>
+
+  <rect x="740" y="298" width="240" height="76" class="panel"/>
+  <text x="750" y="316" class="label">Numbered options. For a shell command the</text>
+  <text x="750" y="332" class="label">"always" option reads "Always allow this</text>
+  <text x="750" y="348" class="label">exact command this session" and covers only</text>
+  <text x="750" y="364" class="label">that command line.</text>
+
+  <rect x="740" y="384" width="240" height="30" class="panel"/>
+  <text x="750" y="403" class="label">Option list: exactly one number.</text>
+
+  <rect x="740" y="420" width="240" height="46" class="panel"/>
+  <text x="750" y="438" class="label">An invalid entry is asked again; nothing</text>
+  <text x="750" y="454" class="label">answers on your behalf, there is no timeout.</text>
+
+  <line x1="720" y1="176" x2="740" y2="176" class="callout"/>
+  <line x1="720" y1="240" x2="740" y2="240" class="callout"/>
+  <line x1="720" y1="332" x2="740" y2="332" class="callout"/>
+  <line x1="720" y1="382" x2="740" y2="382" class="callout"/>
+  <line x1="720" y1="430" x2="740" y2="430" class="callout"/>
+</svg>

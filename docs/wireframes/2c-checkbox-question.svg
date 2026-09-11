@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" width="1000" height="640">
+  <style>
+    .frame { fill: #ffffff; stroke: #999999; stroke-width: 1.5; }
+    .bar { fill: #e6e6e6; stroke: #999999; }
+    .panel { fill: #f7f7f7; stroke: #bbbbbb; }
+    .mono { font-family: monospace; font-size: 14px; fill: #222222; }
+    .muted { fill: #808080; }
+    .bold { font-weight: bold; }
+    .label { font-family: sans-serif; font-size: 12px; fill: #555555; }
+    .callout { stroke: #999999; stroke-dasharray: 4 3; fill: none; }
+    .titlebar { font-family: sans-serif; font-size: 13px; fill: #444444; }
+  </style>
+  <rect x="20" y="20" width="700" height="600" class="frame"/>
+  <rect x="20" y="20" width="700" height="28" class="bar"/>
+  <text x="32" y="39" class="titlebar">Terminal — coder (project: ~/work/app)</text>
+
+  <text x="32" y="80" class="mono bold">&gt; check the deploy on the test environments</text>
+  <text x="32" y="110" class="mono">· mcp__envcontrol__runChecks</text>
+
+  <text x="32" y="150" class="mono bold">Which environments should I check?</text>
+  <text x="32" y="176" class="mono">  1) dev4 — last deploy 2 hours ago</text>
+  <text x="32" y="196" class="mono">  2) dev5</text>
+  <text x="32" y="216" class="mono">  3) uat — release candidate</text>
+  <text x="32" y="246" class="mono bold">Select (comma-separated numbers): 1,3</text>
+
+  <text x="32" y="300" class="mono muted">Supported shape, shown here with an illustrative tool. No built-in plugin asks a</text>
+  <text x="32" y="320" class="mono muted">checkbox question today; plugin authors can (see PLUGIN-DEVELOPMENT.md).</text>
+
+  <rect x="740" y="140" width="240" height="46" class="panel"/>
+  <text x="750" y="158" class="label">Any tool or plugin may ask; the question</text>
+  <text x="750" y="174" class="label">names what it needs from you.</text>
+
+  <rect x="740" y="192" width="240" height="46" class="panel"/>
+  <text x="750" y="210" class="label">An option may carry a one-line detail</text>
+  <text x="750" y="226" class="label">after a dash.</text>
+
+  <rect x="740" y="238" width="240" height="46" class="panel"/>
+  <text x="750" y="256" class="label">Checkbox list: one or more numbers,</text>
+  <text x="750" y="272" class="label">comma-separated; at least one is required.</text>
+
+  <line x1="720" y1="150" x2="740" y2="150" class="callout"/>
+  <line x1="720" y1="196" x2="740" y2="196" class="callout"/>
+  <line x1="720" y1="246" x2="740" y2="246" class="callout"/>
+</svg>
