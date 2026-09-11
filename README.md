@@ -1,5 +1,7 @@
 # dmipi-coder
 
+[![Build](https://github.com/DimaZirix/DmiPi-Coder/actions/workflows/build.yml/badge.svg)](https://github.com/DimaZirix/DmiPi-Coder/actions/workflows/build.yml)
+
 An agent engine for local LLMs, shipped as a coding agent. Plain Java, no framework, two runtime libraries.
 
 Point it at an OpenAI-compatible endpoint (llama.cpp, LM Studio, vLLM, Ollama, or a hosted API) and, with the built-in plugins, it reads your project, edits files, runs commands, fetches pages, keeps notes, plans, delegates to subagents, and loads skills and MCP servers, all behind a permission gate that asks you before anything risky, with shell commands confined to a sandbox.
@@ -87,15 +89,34 @@ Details, options and what each removal costs: [docs/PLUGIN-CATALOG.md](docs/PLUG
 | `agent-core` | The embeddable engine: the conversation loop, the permission gate, the sandbox contract, the plugin interface, and every built-in plugin. A front-end talks to it over three channels: prompts in, typed events out, questions to the user. |
 | `agent-console` | The terminal front-end. It renders the three channels and adds four slash commands (`/plan`, `/llm`, `/resume`, `/exit`). No agent logic of its own. |
 
-## Build and run
+## Get it
 
-Needs Java 25 and Maven.
+Needs Java 25. Three ways in, from the least to the most involved:
+
+**The console, ready to run.** Every [release](https://github.com/DimaZirix/DmiPi-Coder/releases) carries one jar with everything inside. Start it in the project you want to work on:
+
+```bash
+cd ~/work/my-project
+java -jar agent-console-<version>-all.jar
+```
+
+**The core, as a library.** `agent-core` is published to this repository's GitHub Packages on every release (and as a snapshot from every push to master). GitHub Packages needs a token even for public packages; the [User Manual](docs/USER-MANUAL.md#13-embedding-the-core) has the two-step setup.
+
+```xml
+<dependency>
+    <groupId>com.dmipi</groupId>
+    <artifactId>agent-core</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+**From source.** Needs Maven as well.
 
 ```bash
 mvn -q install
 ```
 
-Then run `com.dmipi.coder.console.ConsoleMain` from your IDE with the working directory set to the project you want to work on, or from the command line as described in the [User Manual](docs/USER-MANUAL.md#2-running-the-console).
+This builds both modules, runs the tests, and leaves the runnable console at `agent-console/target/agent-console-<version>-all.jar`. Or run `com.dmipi.coder.console.ConsoleMain` from your IDE with the working directory set to the project you want to work on.
 
 ## Use the core from your code
 
@@ -138,10 +159,10 @@ void main() {
 
 Everything not registered does not exist for this agent: it cannot edit, run commands or reach the network. Add `FilesEditPlugin` and the HIL channel starts receiving permission questions, one per edit, with the diff as the preview.
 
-Run it from a project directory with a model server on port 8080, using the classpath from the [User Manual](docs/USER-MANUAL.md#2-running-the-console):
+Run it from a project directory with a model server on port 8080. The console jar contains `agent-core` and its libraries, so it doubles as the classpath:
 
 ```bash
-java -cp "$CODER_CP" Hello.java
+java -cp agent-console-<version>-all.jar Hello.java
 ```
 
 Every builder call, the CI recipe and the network options are in the manual's [embedding section](docs/USER-MANUAL.md#13-embedding-the-core).

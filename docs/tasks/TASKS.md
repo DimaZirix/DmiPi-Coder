@@ -12,5 +12,4 @@
 | [T06](T06-podman-background-teardown.md) | Stop background podman containers at session close | Sandbox | planned | — |
 | [T07](T07-memory-repo-root-walk.md) | Project memory walked up to the repository root | Memory | planned | open question 6 |
 | [T08](T08-network-and-sandbox-settings.md) | Network and sandbox knobs in the settings file | Configuration | planned | open question 2 |
-| [T09](T09-launcher.md) | A launcher script or runnable jar for the console | Console | planned | — |
 | [T10](T10-think-tag-extraction.md) | Extract think-tags written inline in answer text | LLM | planned | — |
