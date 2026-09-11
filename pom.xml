@@ -27,22 +27,6 @@
         <versions-plugin.version>2.19.1</versions-plugin.version>
     </properties>
 
-    <!-- Where `mvn deploy` publishes agent-core (and this parent): GitHub Packages of the repository.
-         The release workflow authenticates with the repository's GITHUB_TOKEN; a consumer needs a
-         personal access token with read:packages in ~/.m2/settings.xml (see docs/USER-MANUAL.md §13). -->
-    <distributionManagement>
-        <repository>
-            <id>github</id>
-            <name>GitHub Packages of DimaZirix/DmiPi-Coder</name>
-            <url>https://maven.pkg.github.com/DimaZirix/DmiPi-Coder</url>
-        </repository>
-        <snapshotRepository>
-            <id>github</id>
-            <name>GitHub Packages of DimaZirix/DmiPi-Coder</name>
-            <url>https://maven.pkg.github.com/DimaZirix/DmiPi-Coder</url>
-        </snapshotRepository>
-    </distributionManagement>
-
     <dependencyManagement>
         <dependencies>
             <dependency>

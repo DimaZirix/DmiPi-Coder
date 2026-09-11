@@ -1,14 +1,13 @@
 name: Release
 
-# Push a tag like v1.2.0: the version becomes 1.2.0, agent-core is published to GitHub Packages,
-# and a GitHub release is created with the runnable console jar attached.
+# Push a tag like v1.2.0: the version becomes 1.2.0, everything is built and tested, and a GitHub
+# release is created with the runnable console jar and the agent-core library jar attached.
 on:
   push:
     tags: ['v*']
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
   release:
@@ -21,17 +20,18 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-          server-id: github
 
       - name: Set the version from the tag
         run: mvn -B -q versions:set -DnewVersion="${GITHUB_REF_NAME#v}" -DprocessAllModules=true -DgenerateBackupPoms=false
 
-      - name: Build, test, and publish agent-core to GitHub Packages
-        run: mvn -B deploy
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and test
+        run: mvn -B verify
 
-      - name: Create the GitHub release with the console jar
-        run: gh release create "$GITHUB_REF_NAME" agent-console/target/agent-console-*-all.jar --title "$GITHUB_REF_NAME" --generate-notes
+      - name: Create the GitHub release with the jars
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          agent-console/target/agent-console-*-all.jar
+          agent-core/target/agent-core-*.jar
+          --title "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

@@ -33,13 +33,13 @@ The manual covers the console and the settings files first, then the content you
 | Optional, for confinement | `bwrap` (bubblewrap) on the host, or `podman` with `pasta` or `slirp4netns`. |
 | Optional, for the installer | `git` on the host. |
 
-You do not have to build anything to run the console: every [GitHub release](https://github.com/DimaZirix/DmiPi-Coder/releases) carries `agent-console-<version>-all.jar`, one jar with the engine and its libraries inside (§2). To embed the core, take `agent-core` from GitHub Packages (§13). To build from source, from the repository root:
+You do not have to build anything to run the console: every [GitHub release](https://github.com/DimaZirix/DmiPi-Coder/releases) carries `agent-console-<version>-all.jar`, one jar with the engine and its libraries inside (§2). To embed the core, take `agent-core-<version>.jar` from the same release or build from source (§13). To build from source, from the repository root:
 
 ```bash
 mvn -q install
 ```
 
-This runs the tests and leaves the runnable console at `agent-console/target/agent-console-<version>-all.jar`. Pushes to `master` and tags run the same build on GitHub Actions; a tag `vX.Y.Z` also publishes `agent-core` X.Y.Z to GitHub Packages and creates the release with the jar.
+This runs the tests and leaves the runnable console at `agent-console/target/agent-console-<version>-all.jar`. Pushes to `master` and tags run the same build on GitHub Actions; a tag `vX.Y.Z` also creates the GitHub release with the console jar and the `agent-core` library jar attached. The library is not published to any Maven repository.
 
 The runtime dependencies are deliberately few. Everything else is the JDK.
 
@@ -358,42 +358,7 @@ Each plugin's tools, required capabilities and constructor options are in the [P
 
 ## 13. Embedding the core
 
-**Getting the library.** `agent-core` is published to the repository's GitHub Packages: every tag `vX.Y.Z` publishes version X.Y.Z, and every push to `master` republishes `1.0-SNAPSHOT`. GitHub Packages requires authentication even to read public packages, so two steps are needed.
-
-Add the repository and the dependency to your `pom.xml`:
-
-```xml
-<repositories>
-    <repository>
-        <id>github</id>
-        <url>https://maven.pkg.github.com/DimaZirix/DmiPi-Coder</url>
-    </repository>
-</repositories>
-
-<dependencies>
-    <dependency>
-        <groupId>com.dmipi</groupId>
-        <artifactId>agent-core</artifactId>
-        <version>1.0.0</version>
-    </dependency>
-</dependencies>
-```
-
-And a server entry with a GitHub personal access token that has the `read:packages` scope in `~/.m2/settings.xml`:
-
-```xml
-<settings>
-    <servers>
-        <server>
-            <id>github</id>
-            <username>YOUR_GITHUB_USERNAME</username>
-            <password>YOUR_TOKEN</password>
-        </server>
-    </servers>
-</settings>
-```
-
-The `id` must be `github` in both files. Without a token Maven reports a 401 from `maven.pkg.github.com`. A source build (`mvn -q install`) puts the same artifact into your local repository, which needs no token.
+**Getting the library.** `agent-core-<version>.jar` is attached to every release; it depends on `jackson-databind` 3.1.4 and `java-diff-utils` 4.17. It is not on Maven Central; `mvn -q install` from a checkout installs `com.dmipi:agent-core:<version>` into your local repository. The Java packages are `com.dmipi.coder.*`.
 
 **Wiring it.** The core is a library. A program that embeds it supplies three things, an out channel, a HIL channel and at least one model, and registers the plugins it wants. Nothing is on by default: every file read, environment fact, session file and plugin is an explicit builder call.
 

@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build:
@@ -20,9 +19,6 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-          # Writes ~/.m2/settings.xml with a <server id="github"> using GITHUB_ACTOR / GITHUB_TOKEN,
-          # matching the <distributionManagement> id in pom.xml.
-          server-id: github
 
       # Tests that need bwrap, podman, systemd or curl skip themselves when the host lacks them.
       - name: Build and test
@@ -33,10 +29,3 @@ jobs:
         with:
           name: agent-console
           path: agent-console/target/agent-console-*-all.jar
-
-      # Every push to master republishes the snapshot of agent-core, so a consumer can track master.
-      - name: Publish the agent-core snapshot to GitHub Packages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: mvn -B -DskipTests deploy
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

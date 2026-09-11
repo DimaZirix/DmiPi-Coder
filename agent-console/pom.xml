@@ -12,11 +12,6 @@
 
     <artifactId>agent-console</artifactId>
 
-    <properties>
-        <!-- The console ships as the release jar (agent-console-<version>-all.jar), not as a library. -->
-        <maven.deploy.skip>true</maven.deploy.skip>
-    </properties>
-
     <!-- The reference front-end: a thin terminal rendering of the core's three channels. No new
          runtime dependencies — the JDK console is enough. -->
     <dependencies>

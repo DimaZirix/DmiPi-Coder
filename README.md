@@ -91,32 +91,11 @@ Details, options and what each removal costs: [docs/PLUGIN-CATALOG.md](docs/PLUG
 
 ## Get it
 
-Needs Java 25. Three ways in, from the least to the most involved:
+Needs Java 25.
 
-**The console, ready to run.** Every [release](https://github.com/DimaZirix/DmiPi-Coder/releases) carries one jar with everything inside. Start it in the project you want to work on:
-
-```bash
-cd ~/work/my-project
-java -jar agent-console-<version>-all.jar
-```
-
-**The core, as a library.** `agent-core` is published to this repository's GitHub Packages on every release (and as a snapshot from every push to master). GitHub Packages needs a token even for public packages; the [User Manual](docs/USER-MANUAL.md#13-embedding-the-core) has the two-step setup.
-
-```xml
-<dependency>
-    <groupId>com.dmipi</groupId>
-    <artifactId>agent-core</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
-
-**From source.** Needs Maven as well.
-
-```bash
-mvn -q install
-```
-
-This builds both modules, runs the tests, and leaves the runnable console at `agent-console/target/agent-console-<version>-all.jar`. Or run `com.dmipi.coder.console.ConsoleMain` from your IDE with the working directory set to the project you want to work on.
+- **Console:** every [release](https://github.com/DimaZirix/DmiPi-Coder/releases) has `agent-console-<version>-all.jar`, self-contained. `java -jar` it from the project directory.
+- **Library:** the same release has `agent-core-<version>.jar`; it depends on `jackson-databind` 3.1.4 and `java-diff-utils` 4.17. Not on Maven Central; `mvn -q install` from a checkout puts `com.dmipi:agent-core` in your local repository.
+- **Source:** `mvn -q install` builds both modules and runs the tests; the console jar lands in `agent-console/target/`.
 
 ## Use the core from your code
 
