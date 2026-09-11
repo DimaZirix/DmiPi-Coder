@@ -6,7 +6,7 @@ Point it at an OpenAI-compatible endpoint (llama.cpp, LM Studio, vLLM, Ollama, o
 
 The coding abilities are plugins; the engine underneath is not about code. It knows a conversation loop, a permission gate, a sandbox contract and a plugin interface. Register other plugins and the same core is another kind of agent.
 
-The engine and the user interface are separate modules. `agent-core` is a library with no user interface of its own: add it to your project and drive it from your code over three channels, prompts in, events out, questions to the user. `agent-console` is one front-end built on that library, the terminal one; a web app, an IDE plugin or a CI job would be others.
+The engine and the user interface are separate modules. `agent-core` is a library with no user interface of its own: add it to your project and drive it from your code over three channels, prompts in, events out, questions to the user. `agent-console` is one front-end built on that library, the terminal one; a web app, an IDE plugin or a CI job would be others. A ten-line example is [below](#use-the-core-from-your-code).
 
 ## Three ideas behind it
 
@@ -96,6 +96,55 @@ mvn -q install
 ```
 
 Then run `com.dmipi.coder.console.ConsoleMain` from your IDE with the working directory set to the project you want to work on, or from the command line as described in the [User Manual](docs/USER-MANUAL.md#2-running-the-console).
+
+## Use the core from your code
+
+The smallest agent: one model, one read-only plugin, answers printed as they stream. A Java 25 compact source file, so this is the whole program.
+
+```java
+import com.dmipi.coder.core.api.Coder;
+import com.dmipi.coder.core.domain.agent.CancelToken;
+import com.dmipi.coder.core.domain.event.OutEvent;
+import com.dmipi.coder.core.domain.hil.Answer;
+import com.dmipi.coder.core.domain.llm.ModelDeclaration;
+import com.dmipi.coder.core.domain.llm.Tier;
+import com.dmipi.coder.core.plugins.files.FilesReadPlugin;
+import com.dmipi.coder.core.plugins.openai.OpenAiProviderPlugin;
+
+void main() {
+    try (Coder coder = Coder.builder()
+            // Out channel: the agent's answer, printed as it streams. Every other event is ignored.
+            .out(event -> { if (event instanceof OutEvent.AnswerDelta(String text)) System.out.print(text); })
+            // HIL channel: where the core asks a person. A real front-end shows the options and reads
+            // a choice; this one prints the question and picks the last option. For a permission
+            // question the last option is "Deny": the tool call is refused and the agent is told so.
+            // This program never asks, because reading files needs no permission.
+            .hil(question -> {
+                System.out.println("Question: " + question.question());
+                return Answer.of(question.options().getLast().id());
+            })
+            // The bundled system prompt.
+            .standardInstructions()
+            // One model on a local OpenAI-compatible server, and the provider plugin that speaks to it.
+            .model(new ModelDeclaration("local", "openai", "http://localhost:8080/v1", Tier.BALANCED, 32_000))
+            .registerPlugin(new OpenAiProviderPlugin())
+            // The only ability: read, list and search files under the current directory.
+            .registerPlugin(new FilesReadPlugin())
+            .build()) {
+        coder.runTurn("Say hello, then tell me in two sentences what this project is about.", new CancelToken());
+    }
+}
+```
+
+Everything not registered does not exist for this agent: it cannot edit, run commands or reach the network. Add `FilesEditPlugin` and the HIL channel starts receiving permission questions, one per edit, with the diff as the preview.
+
+Run it from a project directory with a model server on port 8080, using the classpath from the [User Manual](docs/USER-MANUAL.md#2-running-the-console):
+
+```bash
+java -cp "$CODER_CP" Hello.java
+```
+
+Every builder call, the CI recipe and the network options are in the manual's [embedding section](docs/USER-MANUAL.md#13-embedding-the-core).
 
 ## Configure a model
 
