@@ -8,6 +8,7 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.function.Predicate;
@@ -28,10 +29,12 @@ public final class EgressProxy implements AutoCloseable {
     private static final int DEFAULT_HTTP_PORT = 80;
     private static final int DEFAULT_TLS_PORT = 443;
     private static final int ACCEPT_BACKLOG = 64;
+    private static final Duration CLOSE_WAIT = Duration.ofSeconds(5);
 
     private final Predicate<String> hostAllowed;
     private final String expectedAuthorization;
     private final ServerSocket server;
+    private final Thread acceptor;
 
     /** With a token, only clients presenting {@code coder:<token>} proxy credentials are served — another instance's sandbox cannot borrow this proxy's policy. An empty token disables the check. */
     public EgressProxy(final Predicate<String> hostAllowed, final String token) {
@@ -42,19 +45,28 @@ public final class EgressProxy implements AutoCloseable {
         } catch (final IOException e) {
             throw new UncheckedIOException("Could not start the egress proxy on loopback", e);
         }
-        Thread.ofVirtual().name("egress-proxy-accept").start(this::acceptLoop);
+        this.acceptor = Thread.ofVirtual().name("egress-proxy-accept").start(this::acceptLoop);
     }
 
     public int port() {
         return server.getLocalPort();
     }
 
+    /** Returns only once the proxy no longer listens: the session shell promises the proxy dies with the session. */
     @Override
     public void close() {
         try {
             server.close();
         } catch (final IOException ignored) {
             // shutting down; every per-connection thread ends when its sockets die
+        }
+        // ServerSocket.close() returns before the port is released while a thread is blocked in
+        // accept(): that thread closes the descriptor when it wakes. Wait for it, so a connect
+        // attempted right after close() is refused instead of landing in a dying backlog.
+        try {
+            acceptor.join(CLOSE_WAIT);
+        } catch (final InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
         }
     }
 
